@@ -1,0 +1,12 @@
+{
+"title": "Disk Reliability Lab v6",
+"panels": [
+{
+"type": "graph",
+"title": "Disk Reliability Score",
+"targets": [
+{"expr":"disk_reliability_score"}
+]
+}
+]
+}

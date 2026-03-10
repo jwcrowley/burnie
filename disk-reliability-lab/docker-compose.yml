@@ -1,0 +1,21 @@
+version: '3'
+
+services:
+
+ api:
+  image: python:3.11
+  volumes:
+   - .:/lab
+  working_dir: /lab
+  command: python3 api_server.py
+  ports:
+   - "8000:8000"
+
+ dashboard:
+  image: python:3.11
+  volumes:
+   - .:/lab
+  working_dir: /lab
+  command: python3 dashboard.py
+  ports:
+   - "8080:8080"
