@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import CSVResponse, JSONResponse
+from fastapi.responses import JSONResponse, Response
+from starlette.responses import StreamingResponse
 from typing import Optional, List
 import sqlite3
 import os
@@ -213,9 +214,12 @@ def export_disks_csv():
         for row in rows:
             yield ",".join(str(v) if v is not None else "" for v in row) + "\n"
 
-    return CSVResponse(
-        content=iter_rows(),
-        filename=f"disks_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    return StreamingResponse(
+        iter_rows(),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f"attachment; filename=disks_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        }
     )
 
 
