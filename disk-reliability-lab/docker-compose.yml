@@ -3,7 +3,7 @@ services:
     build: .
     command: python3 api_server.py
     ports:
-      - "8001:8000"
+      - "8181:8000"
     environment:
       - DB=./disks.db
       - ALERT_RELIABILITY_THRESHOLD=70
