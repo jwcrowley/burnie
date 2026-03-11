@@ -17,7 +17,8 @@ serial TEXT,
 device TEXT,
 started TEXT,
 finished TEXT,
-result TEXT
+result TEXT,
+test_type TEXT
 );
 
 CREATE TABLE IF NOT EXISTS smart_history (

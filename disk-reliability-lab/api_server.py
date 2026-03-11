@@ -629,10 +629,12 @@ def get_alerts(
 @app.get("/tests/running")
 def get_running_tests():
     """Get currently running tests."""
+    from datetime import datetime, timedelta
+
     conn = get_db()
 
     query = """
-        SELECT t.*, d.model, d.vendor
+        SELECT t.*, d.model, d.vendor, d.size_bytes
         FROM tests t
         LEFT JOIN disks d ON d.serial = t.serial
         WHERE t.finished IS NULL
@@ -641,7 +643,54 @@ def get_running_tests():
     rows = conn.execute(query,()).fetchall()
     conn.close()
 
-    return [dict(row) for row in rows]
+    # Test type labels
+    test_type_labels = {
+        'quick': 'Quick SMART',
+        'short': 'Short Test',
+        'long': 'Long Test',
+        'burnin': 'Burn-in',
+        None: 'Burn-in'
+    }
+
+    result = []
+    for row in rows:
+        row_dict = dict(row)
+
+        # Add size in GB
+        if row_dict.get('size_bytes'):
+            row_dict['size_gb'] = round(row_dict['size_bytes'] / (1024**3), 1)
+
+        # Add test type label
+        test_type = row_dict.get('test_type')
+        row_dict['test_type_label'] = test_type_labels.get(test_type, test_type or 'Burn-in')
+
+        # Format started time (shorter format)
+        if row_dict.get('started'):
+            try:
+                dt = datetime.fromisoformat(row_dict['started'])
+                row_dict['started_short'] = dt.strftime('%H:%M')
+            except:
+                row_dict['started_short'] = row_dict['started'][-8:-3] if len(row_dict['started']) > 8 else row_dict['started']
+
+        # Calculate elapsed time
+        if row_dict.get('started'):
+            try:
+                dt = datetime.fromisoformat(row_dict['started'])
+                elapsed = datetime.now() - dt
+                hours, remainder = divmod(int(elapsed.total_seconds()), 3600)
+                minutes, _ = divmod(remainder, 60)
+                if hours > 0:
+                    row_dict['elapsed'] = f'{hours}h {minutes}m'
+                elif minutes > 0:
+                    row_dict['elapsed'] = f'{minutes}m'
+                else:
+                    row_dict['elapsed'] = '< 1m'
+            except:
+                row_dict['elapsed'] = '-'
+
+        result.append(row_dict)
+
+    return result
 
 
 @app.get("/tests/history")
@@ -1004,6 +1053,7 @@ async def start_test(request: Request):
         # Parse request body
         body = await request.json()
         device = body.get('device')
+        test_type = body.get('test_type', 'burnin')
 
         if not device:
             return JSONResponse(
@@ -1082,9 +1132,9 @@ async def start_test(request: Request):
 
         # Create test record
         conn.execute("""
-            INSERT INTO tests (serial, device, started, result)
-            VALUES (?, ?, datetime('now'), 'running')
-        """, (serial, device))
+            INSERT INTO tests (serial, device, started, result, test_type)
+            VALUES (?, ?, datetime('now'), 'running', ?)
+        """, (serial, device, test_type))
         conn.commit()
         conn.close()
 
@@ -1094,7 +1144,8 @@ async def start_test(request: Request):
             "serial": serial,
             "model": model,
             "vendor": vendor,
-            "message": f"Burn-in test started on {device}"
+            "test_type": test_type,
+            "message": f"{test_type.capitalize()} test started on {device}"
         }
 
     except Exception as e:
