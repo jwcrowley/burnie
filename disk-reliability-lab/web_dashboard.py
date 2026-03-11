@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Optional
 
 from fastapi import FastAPI, Request, Response
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import uvicorn
@@ -34,6 +34,38 @@ async def fetch_api(endpoint: str):
     async with httpx.AsyncClient() as client:
         response = await client.get(f"{API_BASE_URL}{endpoint}")
         return response.json()
+
+
+# ============================================================================
+# API Proxy - Proxy /api/* requests to the backend API server
+# ============================================================================
+
+@app.api_route("/api/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
+async def api_proxy(path: str, request: Request):
+    """Proxy API requests to the backend server."""
+    async with httpx.AsyncClient() as client:
+        # Build URL and forward request
+        url = f"{API_BASE_URL}/api/{path}"
+
+        # Forward query parameters
+        query_params = str(request.url.query)
+        if query_params:
+            url += f"?{query_params}"
+
+        # Make the request with the same method
+        response = await client.request(
+            method=request.method,
+            url=url,
+            headers=dict(request.headers),
+            content=await request.body()
+        )
+
+        # Return the response
+        return Response(
+            content=response.content,
+            status_code=response.status_code,
+            headers=dict(response.headers)
+        )
 
 
 def get_refresh_interval():
