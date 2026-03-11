@@ -23,7 +23,7 @@
         <p class="text-gray-600 dark:text-gray-400">Test queue and execution history</p>
     </div>
     <div class="flex gap-2">
-        <button onclick="document.getElementById('new-test-modal').classList.remove('hidden')" class="btn-primary">
+        <button onclick="openNewTestModal()" class="btn-primary">
             <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
             New Test
         </button>
@@ -139,17 +139,21 @@
 
 <!-- New Test Modal -->
 <div id="new-test-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 hidden">
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
         <div class="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
             <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Start New Test</h3>
             <button onclick="document.getElementById('new-test-modal').classList.add('hidden')" class="text-gray-400 hover:text-gray-500">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
             </button>
         </div>
-        <form class="p-4 space-y-4">
+        <div class="p-4 space-y-4">
+            <!-- Available Disks -->
             <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Disk Serial</label>
-                <input type="text" placeholder="Enter serial number..." class="w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:border-primary-500 focus:ring-primary-500">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Available Disks</label>
+                <select id="disk-select" class="w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:border-primary-500 focus:ring-primary-500">
+                    <option value="">Loading available disks...</option>
+                </select>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Shows unmounted physical disks only</p>
             </div>
             <div>
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Test Type</label>
@@ -162,15 +166,58 @@
             </div>
             <div class="flex gap-2 justify-end">
                 <button type="button" onclick="document.getElementById('new-test-modal').classList.add('hidden')" class="btn-secondary">Cancel</button>
-                <button type="submit" class="btn-primary">Start Test</button>
+                <button type="button" onclick="startTest()" class="btn-primary">Start Test</button>
             </div>
-        </form>
+        </div>
     </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
+    // Open new test modal and load available disks
+    async function openNewTestModal() {
+        document.getElementById('new-test-modal').classList.remove('hidden');
+
+        const diskSelect = document.getElementById('disk-select');
+        diskSelect.innerHTML = '<option value="">Loading...</option>';
+
+        try {
+            const response = await fetch('/api/system/available-disks');
+            const data = await response.json();
+
+            if (data.disks && data.disks.length > 0) {
+                diskSelect.innerHTML = '<option value="">Select a disk...</option>';
+                data.disks.forEach(disk => {
+                    const option = document.createElement('option');
+                    option.value = disk.device;
+                    option.textContent = `${disk.name} (${disk.size})`;
+                    diskSelect.appendChild(option);
+                });
+            } else {
+                diskSelect.innerHTML = '<option value="">No available disks found</option>';
+            }
+        } catch (error) {
+            diskSelect.innerHTML = '<option value="">Error loading disks</option>';
+            console.error('Error loading disks:', error);
+        }
+    }
+
+    // Start test function
+    async function startTest() {
+        const diskSelect = document.getElementById('disk-select');
+        const device = diskSelect.value;
+
+        if (!device) {
+            alert('Please select a disk');
+            return;
+        }
+
+        // TODO: Implement actual test start logic
+        alert(`Test would be started on ${device}`);
+        document.getElementById('new-test-modal').classList.add('hidden');
+    }
+
     // Load test statistics
     async function loadTestStats() {
         const summary = await fetch('/api/tests/summary').then(r => r.json());

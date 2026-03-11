@@ -121,7 +121,7 @@
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
         <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Temperature Status</h2>
         <div id="temperature-status"
-             hx-get="/api/temperature/summary"
+             hx-get="/partials/temperature/status"
              hx-trigger="load, every {{ refresh_interval }}s">
             <div class="flex justify-center py-4">
                 <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div>

@@ -308,6 +308,17 @@ async def partial_tests_history(
     )
 
 
+@app.get("/partials/temperature/status", response_class=HTMLResponse)
+async def partial_temperature_status(request: Request):
+    """Partial update for temperature status."""
+    temp_data = await fetch_api("/temperature/summary")
+
+    return templates.TemplateResponse(
+        "partials/temperature_status.html",
+        {"request": request, "temp": temp_data}
+    )
+
+
 # ============================================================================
 # SSE for Real-time Updates
 # ============================================================================

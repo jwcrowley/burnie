@@ -1,0 +1,20 @@
+{% if temp.reading_count > 0 %}
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <div class="text-center p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-1">Average Temperature</p>
+        <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ temp.avg_temperature or '-' }}°C</p>
+    </div>
+    <div class="text-center p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-1">Peak Temperature</p>
+        <p class="text-2xl font-bold {% if temp.max_temperature and temp.max_temperature > 50 %}text-red-600{% else %}text-gray-900 dark:text-white{% endif %}">{{ temp.max_temperature or '-' }}°C</p>
+    </div>
+    <div class="text-center p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-1">Recent Readings</p>
+        <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ temp.reading_count }}</p>
+    </div>
+</div>
+{% else %}
+<div class="p-4 text-center text-gray-500 dark:text-gray-400">
+    <p>No temperature data available in the last hour.</p>
+</div>
+{% endif %}

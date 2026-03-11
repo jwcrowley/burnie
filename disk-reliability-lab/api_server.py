@@ -812,6 +812,60 @@ def health_check():
     return {"status": "healthy", "service": "disk-reliability-lab-api"}
 
 
+@app.get("/system/available-disks")
+def get_available_disks():
+    """Get list of available disk devices for testing."""
+    import subprocess
+    import os
+    import re
+
+    try:
+        # Get list of block devices
+        result = subprocess.run(
+            ['lsblk', '-d', '-n', '-o', 'NAME,SIZE,TYPE,MOUNTPOINT'],
+            capture_output=True,
+            text=True
+        )
+
+        disks = []
+        for line in result.stdout.strip().split('\n'):
+            if not line:
+                continue
+
+            parts = line.split()
+            if len(parts) < 3:
+                continue
+
+            name = parts[0]
+            size = parts[1] if len(parts) > 1 else ''
+            dtype = parts[2] if len(parts) > 2 else ''
+            mountpoint = parts[3] if len(parts) > 3 else ''
+
+            # Skip loopback, raid, etc. - only physical disks
+            if dtype not in ['disk']:
+                continue
+
+            # Skip if mounted (likely in use)
+            if mountpoint:
+                continue
+
+            # Check if device exists
+            device_path = f"/dev/{name}"
+            if not os.path.exists(device_path):
+                continue
+
+            disks.append({
+                "name": name,
+                "device": device_path,
+                "size": size,
+                "type": dtype
+            })
+
+        return {"disks": disks}
+    except Exception as e:
+        return {"disks": [], "error": str(e)}
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
