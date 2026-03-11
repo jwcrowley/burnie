@@ -1,25 +1,29 @@
-version: '3'
-
 services:
+  api:
+    build: .
+    command: python3 api_server.py
+    ports:
+      - "8001:8000"
+    environment:
+      - DB=./disks.db
+      - ALERT_RELIABILITY_THRESHOLD=70
+      - ALERT_TEMPERATURE_THRESHOLD=45
+    volumes:
+      - ./disks.db:/lab/disks.db
+      - ./artifacts:/lab/artifacts
 
- api:
-  build: .
-  command: python3 api_server.py
-  ports:
-   - "8000:8000"
-  environment:
-   - DB=./disks.db
-   - ALERT_RELIABILITY_THRESHOLD=70
-   - ALERT_TEMPERATURE_THRESHOLD=45
-
- dashboard:
-  build: .
-  command: python3 web_dashboard.py
-  ports:
-   - "8080:8080"
-  environment:
-   - API_BASE_URL=http://api:8000
-   - DASHBOARD_PORT=8080
-   - DASHBOARD_REFRESH_INTERVAL=30
-  depends_on:
-   - api
+  dashboard:
+    build: .
+    command: python3 web_dashboard.py
+    ports:
+      - "8080:8080"
+    environment:
+      - API_BASE_URL=http://api:8000
+      - DASHBOARD_PORT=8080
+      - DASHBOARD_REFRESH_INTERVAL=30
+      - DB=./disks.db
+    depends_on:
+      - api
+    volumes:
+      - ./disks.db:/lab/disks.db
+      - ./artifacts:/lab/artifacts
