@@ -854,45 +854,82 @@ def get_available_disks():
     """Get list of available disk devices for testing."""
     import subprocess
     import os
-    import re
+    import json
 
     try:
-        # Get list of all block devices with mount info
+        # Get list of all block devices as JSON
         result = subprocess.run(
-            ['lsblk', '-n', '-o', 'NAME,SIZE,TYPE,MOUNTPOINT'],
+            ['lsblk', '-J', '-o', 'NAME,SIZE,TYPE,MOUNTPOINT'],
             capture_output=True,
             text=True
         )
+
+        data = json.loads(result.stdout)
+        devices = data.get('blockdevices', [])
 
         # Track which disks have mounted partitions
         mounted_disks = set()
         all_disks = {}
 
-        for line in result.stdout.strip().split('\n'):
-            if not line:
-                continue
+        def process_device(device, parent_disk=''):
+            """Recursively process devices and their children."""
+            name = device.get('name', '')
+            dtype = device.get('type', '')
+            size = device.get('size', '')
+            mountpoint = device.get('mountpoint', '')
+            children = device.get('children', [])
 
-            parts = line.split()
-            if len(parts) < 3:
-                continue
-
-            name = parts[0]
-            size = parts[1] if len(parts) > 1 else ''
-            dtype = parts[2] if len(parts) > 2 else ''
-            mountpoint = parts[3] if len(parts) > 3 else ''
-
-            # Only consider physical disks
             if dtype == 'disk':
                 all_disks[name] = {'size': size, 'type': dtype}
-                # Disk itself is mounted (rare but possible)
+                parent_disk = name
                 if mountpoint:
                     mounted_disks.add(name)
-            # Check partitions - if mounted, mark parent disk as used
-            elif dtype in ['part']:
-                # Extract parent disk name (e.g., sda1 -> sda, nvme0n1p1 -> nvme0n1)
-                parent_disk = re.sub(r'p?\d+$', '', name)
-                if mountpoint:
-                    mounted_disks.add(parent_disk)
+
+            # Process children (partitions)
+            for child in children:
+                child_name = child.get('name', '')
+                child_type = child.get('type', '')
+                child_mount = child.get('mountpoint', '')
+
+                if child_type in ['part']:
+                    # Extract parent disk name from partition name
+                    # e.g., sda1 -> sda, nvme0n1p1 -> nvme0n1
+                    if 'p' in child_name and child_name.count('p') == 1 and 'n' in child_name:
+                        # nvme0n1p1 -> nvme0n1
+                        match = child_name.split('p')[0]
+                    else:
+                        # sda1 -> sda
+                        match = ''.join(c for c in child_name if not c.isdigit())
+
+                    if child_mount:
+                        mounted_disks.add(match)
+
+                # Recursively process nested children
+                process_device(child, parent_disk)
+
+        for device in devices:
+            process_device(device)
+
+        # Check for ZFS pool disks
+        try:
+            zpool_result = subprocess.run(
+                ['zpool', 'status', '-L'],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if zpool_result.returncode == 0:
+                import re
+                for line in zpool_result.stdout.split('\n'):
+                    if '/dev/' in line:
+                        match = re.search(r'/dev/(\w+)', line)
+                        if match:
+                            device_name = match.group(1)
+                            # Remove partition number to get disk name
+                            disk_name = ''.join(c for c in device_name if not c.isdigit())
+                            mounted_disks.add(disk_name)
+        except (FileNotFoundError, subprocess.TimeoutExpired, Exception):
+            pass
 
         disks = []
         for name, info in all_disks.items():
