@@ -229,6 +229,33 @@
         return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
     }
 
+    // Delete disk function
+    async function deleteDisk(serial, event) {
+        event.stopPropagation();
+
+        if (!confirm(`Delete disk ${serial}?\n\nThis will permanently delete:\n- Disk record\n- All test history\n- SMART data\n- Temperature history\n- Latency anomalies\n\nThis action cannot be undone.`)) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/disks/${serial}`, {
+                method: 'DELETE'
+            });
+
+            if (response.ok) {
+                // Refresh the table
+                htmx.trigger('#disks-table-body', 'load');
+                // Show success message
+                alert(`Disk ${serial} deleted successfully`);
+            } else {
+                const error = await response.json();
+                alert(`Failed to delete: ${error.detail || 'Unknown error'}`);
+            }
+        } catch (error) {
+            alert(`Error: ${error.message}`);
+        }
+    }
+
     // Sort button handling
     document.querySelectorAll('.sort-btn').forEach(btn => {
         btn.addEventListener('click', function() {

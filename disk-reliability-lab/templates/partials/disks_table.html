@@ -31,7 +31,10 @@
         {% if disk.last_test %}{{ disk.last_test[:10] }}{% else %}-{% endif %}
     </td>
     <td class="px-4 py-3 text-right text-sm">
-        <a href="/disks/{{ disk.serial }}" class="text-primary-600 hover:text-primary-700" onclick="event.stopPropagation()">View</a>
+        <a href="/disks/{{ disk.serial }}" class="text-primary-600 hover:text-primary-700 mr-3" onclick="event.stopPropagation()">View</a>
+        <button onclick="deleteDisk('{{ disk.serial }}', event)" class="text-red-600 hover:text-red-700" title="Delete disk">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 011-1h2a1 1 0 011 1v3M4 7h16"></path></svg>
+        </button>
     </td>
 </tr>
 {% else %}

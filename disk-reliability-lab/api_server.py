@@ -70,6 +70,32 @@ def get_disks(
     return [dict(row) for row in rows]
 
 
+@app.delete("/disks/{serial}")
+def delete_disk(serial: str):
+    """Delete a disk record and all associated data."""
+    conn = get_db()
+
+    # Check if disk exists
+    disk = conn.execute("SELECT serial FROM disks WHERE serial = ?", (serial,)).fetchone()
+    if not disk:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Disk not found")
+
+    # Delete associated data in correct order (tests, smart_history, temperature_history, latency_anomalies, then disk)
+    conn.execute("DELETE FROM tests WHERE serial = ?", (serial,))
+    conn.execute("DELETE FROM smart_history WHERE serial = ?", (serial,))
+    conn.execute("DELETE FROM temperature_history WHERE serial = ?", (serial,))
+    conn.execute("DELETE FROM latency_anomalies WHERE serial = ?", (serial,))
+    deleted_count = conn.execute("DELETE FROM disks WHERE serial = ?", (serial,)).rowcount
+    conn.commit()
+    conn.close()
+
+    return {
+        "message": f"Deleted disk {serial}",
+        "deleted": deleted_count > 0
+    }
+
+
 @app.get("/disks/{serial}")
 def get_disk(serial: str):
     """Get detailed information about a specific disk including all history."""

@@ -148,7 +148,7 @@
         </div>
         <div class="p-4 space-y-4">
             <!-- Destructive Warning -->
-            <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-3">
+            <div id="destructive-warning" class="hidden bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-3">
                 <div class="flex">
                     <svg class="w-5 h-5 text-red-400 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
                     <div class="text-sm text-red-800 dark:text-red-200">
@@ -174,7 +174,7 @@
             </div>
             <div>
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Test Type</label>
-                <select id="test-type" class="w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:border-primary-500 focus:ring-primary-500">
+                <select id="test-type" onchange="updateDestructiveWarning()" class="w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:border-primary-500 focus:ring-primary-500">
                     <option value="quick">Quick Test (SMART check only, non-destructive)</option>
                     <option value="short">Short Test (~2 minutes, non-destructive)</option>
                     <option value="long">Long Test (~several hours, non-destructive)</option>
@@ -182,12 +182,14 @@
                 </select>
             </div>
 
-            <!-- Confirmation Checkbox -->
-            <div class="flex items-start">
-                <input type="checkbox" id="confirm-destructive" class="mt-1 h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded">
-                <label for="confirm-destructive" class="ml-2 text-sm text-gray-700 dark:text-gray-300">
-                    I understand this will destroy all data on the selected disk
-                </label>
+            <!-- Confirmation Checkbox (only for destructive tests) -->
+            <div id="confirmation-section" class="hidden">
+                <div class="flex items-start">
+                    <input type="checkbox" id="confirm-destructive" class="mt-1 h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded">
+                    <label for="confirm-destructive" class="ml-2 text-sm text-gray-700 dark:text-gray-300">
+                        I understand this will destroy all data on the disk
+                    </label>
+                </div>
             </div>
 
             <div class="flex gap-2 justify-end">
@@ -232,6 +234,9 @@
             diskSelect.innerHTML = '<option value="">Error loading disks</option>';
             console.error('Error loading disks:', error);
         }
+
+        // Initialize destructive warning state
+        updateDestructiveWarning();
     }
 
     // Update disk details when selection changes
@@ -320,16 +325,23 @@
             return;
         }
 
-        const confirmCheckbox = document.getElementById('confirm-destructive');
-        if (!confirmCheckbox.checked) {
-            alert('Please confirm that you understand this will destroy all data on the disk.');
-            return;
+        // For destructive tests, require checkbox
+        if (testType === 'burnin') {
+            const confirmCheckbox = document.getElementById('confirm-destructive');
+            if (!confirmCheckbox.checked) {
+                alert('Please confirm that you understand this will destroy all data on the disk.');
+                return;
+            }
         }
 
-        // Final confirmation
+        // Final confirmation for all tests
         const disk = availableDisks.find(d => d.device === device);
         const diskInfo = disk ? disk.display_name || disk.name : device;
-        if (!confirm(`Start ${testType} test on:\n${diskInfo}\n\nThis will destroy all data on the disk. Continue?`)) {
+        const testLabel = testType === 'burnin'
+            ? `This will DESTROY ALL DATA on ${diskInfo}. Continue?`
+            : `Start ${testType} test on ${diskInfo}?`;
+
+        if (!confirm(testLabel)) {
             return;
         }
 
@@ -344,11 +356,16 @@
 
             if (response.ok) {
                 const result = await response.json();
-                alert(`${testType.toUpperCase()} test started!\n\nDevice: ${device}\nSerial: ${result.serial || 'Unknown'}\n\nThis will take several hours. Monitor progress in the Running Tests section.`);
+                const destructiveMsg = testType === 'burnin'
+                    ? `\n\nThis will destroy all data. Monitor progress in the Running Tests section.`
+                    : `\n\nMonitor progress in the Running Tests section.`;
+                alert(`${testType.toUpperCase()} test started!\n\nDevice: ${device}\nSerial: ${result.serial || 'Unknown'}${destructiveMsg}`);
                 document.getElementById('new-test-modal').classList.add('hidden');
                 // Reset form
-                confirmCheckbox.checked = false;
-                document.getElementById('start-test-btn').disabled = true;
+                if (document.getElementById('confirm-destructive')) {
+                    document.getElementById('confirm-destructive').checked = false;
+                }
+                updateDestructiveWarning();
                 // Refresh running tests
                 setTimeout(() => location.reload(), 2000);
             } else {
@@ -358,6 +375,26 @@
             }
         } catch (error) {
             alert(`Error: ${error.message}`);
+        }
+    }
+
+    // Update destructive warning and confirmation based on test type
+    function updateDestructiveWarning() {
+        const testType = document.getElementById('test-type').value;
+        const warning = document.getElementById('destructive-warning');
+        const confirmationSection = document.getElementById('confirmation-section');
+        const startBtn = document.getElementById('start-test-btn');
+
+        if (testType === 'burnin') {
+            // Show warning and confirmation for burnin
+            warning.classList.remove('hidden');
+            confirmationSection.classList.remove('hidden');
+            startBtn.disabled = true; // Require checkbox
+        } else {
+            // Hide warning and confirmation for non-destructive tests
+            warning.classList.add('hidden');
+            confirmationSection.classList.add('hidden');
+            startBtn.disabled = false; // No checkbox needed
         }
     }
 
