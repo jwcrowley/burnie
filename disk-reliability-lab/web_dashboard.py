@@ -40,8 +40,7 @@ async def fetch_api(endpoint: str):
 # API Proxy - Proxy /api/* requests to the backend API server
 # ============================================================================
 
-@app.api_route("/api/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
-async def api_proxy(path: str, request: Request):
+async def proxy_request(method: str, path: str, request: Request):
     """Proxy API requests to the backend server."""
     async with httpx.AsyncClient() as client:
         # Build URL and forward request
@@ -52,11 +51,16 @@ async def api_proxy(path: str, request: Request):
         if query_params:
             url += f"?{query_params}"
 
-        # Make the request with the same method
+        # Build headers, filtering out hop-by-hop headers
+        headers = dict(request.headers)
+        headers.pop("host", None)
+        headers.pop("content-length", None)
+
+        # Make the request
         response = await client.request(
-            method=request.method,
+            method=method,
             url=url,
-            headers=dict(request.headers),
+            headers=headers,
             content=await request.body()
         )
 
@@ -64,8 +68,24 @@ async def api_proxy(path: str, request: Request):
         return Response(
             content=response.content,
             status_code=response.status_code,
-            headers=dict(response.headers)
+            headers={"Content-Type": response.headers.get("content-type", "application/json")}
         )
+
+@app.get("/api/{path:path}")
+async def api_proxy_get(path: str, request: Request):
+    return await proxy_request("GET", path, request)
+
+@app.post("/api/{path:path}")
+async def api_proxy_post(path: str, request: Request):
+    return await proxy_request("POST", path, request)
+
+@app.put("/api/{path:path}")
+async def api_proxy_put(path: str, request: Request):
+    return await proxy_request("PUT", path, request)
+
+@app.delete("/api/{path:path}")
+async def api_proxy_delete(path: str, request: Request):
+    return await proxy_request("DELETE", path, request)
 
 
 def get_refresh_interval():
