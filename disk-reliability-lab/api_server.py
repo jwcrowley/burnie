@@ -866,6 +866,63 @@ def get_available_disks():
         return {"disks": [], "error": str(e)}
 
 
+@app.post("/tests/start")
+def start_test(request):
+    """Start a burn-in test on a device."""
+    import subprocess
+    import json
+
+    try:
+        # Parse request body
+        body = json.loads(request.body.decode())
+        device = body.get('device')
+
+        if not device:
+            raise HTTPException(status_code=400, detail="Device is required")
+
+        # Validate device exists
+        import os
+        if not os.path.exists(device):
+            raise HTTPException(status_code=404, detail=f"Device not found: {device}")
+
+        # Get device info for serial
+        try:
+            serial_result = subprocess.run(
+                ['smartctl', '-i', device],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            serial = None
+            for line in serial_result.stdout.split('\n'):
+                if 'Serial Number:' in line or 'Serial number:' in line:
+                    serial = line.split(':', 1)[1].strip()
+                    break
+        except:
+            serial = os.path.basename(device)
+
+        # Create test record
+        conn = get_db()
+        conn.execute("""
+            INSERT INTO tests (serial, device, started, result)
+            VALUES (?, ?, datetime('now'), 'running')
+        """, (serial, device))
+        conn.commit()
+        conn.close()
+
+        return {
+            "status": "started",
+            "device": device,
+            "serial": serial,
+            "message": f"Test started. Run: sudo ./burnin.sh {device}"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

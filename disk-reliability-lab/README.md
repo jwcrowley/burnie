@@ -3,6 +3,33 @@
 A full-featured disk validation and reliability analytics platform inspired by
 large-scale storage operators.
 
+## Burn-in Testing Primer
+
+**Why Burn-in Disks?**
+
+Enterprise storage operators know that new disks are the most unreliable component in any storage system. Factory defects show up early, and deploying untested disks is a recipe for data loss and expensive RAID rebuilds.
+
+**What This Tool Does:**
+
+- **Sequential Surface Scan** - Writes and verifies every sector to catch surface defects
+- **SMART Attribute Tracking** - Monitors reallocated sectors, pending sectors, and error counts
+- **Latency Testing** - Identifies disks with abnormal latency spikes under load
+- **Thermal Stress Testing** - Ensures disks operate within safe temperature ranges
+- **Reliability Scoring** - Calculates a 0-100 score based on multiple health indicators
+
+**When to Use:**
+- New disk arrivals (before putting into production)
+- Pre-deployment certification for ZFS pools
+- RMA warranty validation (prove defects to manufacturers)
+- Suspected disk failure verification
+- Periodic health checks on critical storage
+
+**The Testing Philosophy:**
+
+> "A disk that survives 24 hours of burn-in testing is exponentially more likely to survive its warranty period than one that hasn't been tested."
+
+This tool implements that philosophy at scale, tracking hundreds of disks through their testing lifecycle.
+
 ## Key Capabilities
 
 - HDD / SSD / NVMe burn-in testing
@@ -89,8 +116,8 @@ docker compose down
 
 Services will be available at:
 - Dashboard: http://localhost:8080
-- API: http://localhost:8000
-- API Docs: http://localhost:8000/docs
+- API: http://localhost:8181
+- API Docs: http://localhost:8181/docs
 
 ## Web Dashboard
 

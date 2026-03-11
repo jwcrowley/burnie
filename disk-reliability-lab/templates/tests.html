@@ -213,9 +213,27 @@
             return;
         }
 
-        // TODO: Implement actual test start logic
-        alert(`Test would be started on ${device}`);
-        document.getElementById('new-test-modal').classList.add('hidden');
+        try {
+            const response = await fetch('/api/tests/start', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ device: device })
+            });
+
+            if (response.ok) {
+                alert(`Burn-in test started on ${device}\n\nThis will take several hours. Monitor progress in the Running Tests section.`);
+                document.getElementById('new-test-modal').classList.add('hidden');
+                // Refresh running tests
+                setTimeout(() => location.reload(), 2000);
+            } else {
+                const error = await response.json();
+                alert(`Failed to start test: ${error.detail || 'Unknown error'}`);
+            }
+        } catch (error) {
+            alert(`Error: ${error.message}`);
+        }
     }
 
     // Load test statistics
