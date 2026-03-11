@@ -12,7 +12,6 @@ from fastapi import FastAPI, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from starlette.middleware.sessions import SessionMiddleware
 import uvicorn
 import httpx
 
@@ -20,12 +19,8 @@ import httpx
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 DASHBOARD_PORT = int(os.getenv("DASHBOARD_PORT", "8080"))
 REFRESH_INTERVAL = int(os.getenv("DASHBOARD_REFRESH_INTERVAL", "30"))
-SECRET_KEY = os.getenv("SECRET_KEY", "disk-reliability-lab-secret-key-change-in-production")
 
 app = FastAPI(title="Disk Reliability Lab Dashboard")
-
-# Add session middleware for potential future auth
-app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
 
 # Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
