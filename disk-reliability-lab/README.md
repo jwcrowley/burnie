@@ -39,24 +39,12 @@ Prometheus
    |
 Grafana dashboards
    |
-Web Dashboard (New)
+Web Dashboard
 ```
 
-Typical Architecture
-
-burn nodes
-   |
-artifacts + metrics
-   |
-API ingestion
-   |
-database
-   |
-Prometheus
-   |
-Grafana dashboards
-
 ## Quick Start
+
+### Option A: Manual Start
 
 ```bash
 chmod +x *.sh
@@ -64,7 +52,7 @@ chmod +x *.sh
 # Initialize database:
 ./diskdb.sh init
 
-# Install dependencies (optional - for dashboard):
+# Install dependencies (for dashboard):
 pip3 install -r requirements.txt
 
 # Run burn-in on disk:
@@ -76,12 +64,33 @@ sudo ./batch_burnin.sh
 # Start API server:
 python3 api_server.py
 
-# Start NEW web dashboard:
+# Start web dashboard:
 python3 web_dashboard.py
 
 # Start Prometheus exporter:
 python3 prometheus_exporter.py
 ```
+
+### Option B: Docker Compose (Recommended)
+
+```bash
+# Initialize database first:
+./diskdb.sh init
+
+# Start all services:
+docker compose up -d
+
+# View logs:
+docker compose logs -f
+
+# Stop services:
+docker compose down
+```
+
+Services will be available at:
+- Dashboard: http://localhost:8080
+- API: http://localhost:8000
+- API Docs: http://localhost:8000/docs
 
 ## Web Dashboard
 
