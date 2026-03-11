@@ -12,32 +12,30 @@
 </div>
 {% endmacro %}
 
-<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-    {{ render_stat_card(
-        'Total Disks',
-        stats.total_disks,
-        '<svg class="w-6 h-6 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"></path></svg>',
-        'bg-primary-100 dark:bg-primary-900/30 rounded-full'
-    ) }}
+{{ render_stat_card(
+    'Total Disks',
+    stats.total_disks,
+    '<svg class="w-6 h-6 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"></path></svg>',
+    'bg-primary-100 dark:bg-primary-900/30 rounded-full'
+) }}
 
-    {{ render_stat_card(
-        'Avg Score',
-        stats.average_score,
-        '<svg class="w-6 h-6 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>',
-        'bg-green-100 dark:bg-green-900/30 rounded-full'
-    ) }}
+{{ render_stat_card(
+    'Avg Score',
+    stats.average_score,
+    '<svg class="w-6 h-6 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>',
+    'bg-green-100 dark:bg-green-900/30 rounded-full'
+) }}
 
-    {{ render_stat_card(
-        'Running Tests',
-        stats.running_tests,
-        '<svg class="w-6 h-6 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>',
-        'bg-blue-100 dark:bg-blue-900/30 rounded-full'
-    ) }}
+{{ render_stat_card(
+    'Running Tests',
+    stats.running_tests,
+    '<svg class="w-6 h-6 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>',
+    'bg-blue-100 dark:bg-blue-900/30 rounded-full'
+) }}
 
-    {{ render_stat_card(
-        'Low Reliability',
-        stats.low_reliability_count,
-        '<svg class="w-6 h-6 text-warning" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>',
-        'bg-yellow-100 dark:bg-yellow-900/30 rounded-full'
-    ) }}
-</div>
+{{ render_stat_card(
+    'Low Reliability',
+    stats.low_reliability_count,
+    '<svg class="w-6 h-6 text-warning" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>',
+    'bg-yellow-100 dark:bg-yellow-900/30 rounded-full'
+) }}

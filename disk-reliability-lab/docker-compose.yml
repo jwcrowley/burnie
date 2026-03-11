@@ -11,6 +11,20 @@ services:
     volumes:
       - ./disks.db:/lab/disks.db
       - ./artifacts:/lab/artifacts
+    # Device passthrough for disk access
+    devices:
+      - /dev/sda:/dev/sda
+      - /dev/sdb:/dev/sdb
+      - /dev/sdc:/dev/sdc
+      - /dev/sdd:/dev/sdd
+      - /dev/sde:/dev/sde
+      - /dev/sdf:/dev/sdf
+    # Capabilities needed for SMART access
+    cap_add:
+      - SYS_RAWIO
+      - SYS_ADMIN
+    # Privileged mode for full hardware access
+    privileged: true
 
   dashboard:
     build: .
