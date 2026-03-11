@@ -628,13 +628,16 @@ def get_alerts(
 
 @app.get("/tests/running")
 def get_running_tests():
-    """Get currently running tests."""
+    """Get currently running tests with fresh disk info from SMART."""
     from datetime import datetime, timedelta
+    import subprocess
+    import os
 
     conn = get_db()
 
     query = """
-        SELECT t.*, d.model, d.vendor, d.size_bytes
+        SELECT t.*,
+               d.model as db_model, d.vendor as db_vendor, d.size_bytes as db_size_bytes
         FROM tests t
         LEFT JOIN disks d ON d.serial = t.serial
         WHERE t.finished IS NULL
@@ -656,9 +659,77 @@ def get_running_tests():
     for row in rows:
         row_dict = dict(row)
 
-        # Add size in GB
-        if row_dict.get('size_bytes'):
-            row_dict['size_gb'] = round(row_dict['size_bytes'] / (1024**3), 1)
+        # Get fresh disk info from smartctl (handles hotswap)
+        device = row_dict.get('device')
+        if device and os.path.exists(device):
+            try:
+                smart_result = subprocess.run(
+                    ['smartctl', '-i', device],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                fresh_model = None
+                fresh_serial = None
+                fresh_vendor = None
+
+                for line in smart_result.stdout.split('\n'):
+                    if 'Serial Number:' in line or 'Serial number:' in line:
+                        fresh_serial = line.split(':', 1)[1].strip()
+                    if 'Device Model:' in line:
+                        fresh_model = line.split(':', 1)[1].strip()
+                    if 'Vendor:' in line:
+                        fresh_vendor = line.split(':', 1)[1].strip()
+
+                # Use fresh info if available, otherwise fall back to database
+                if fresh_model:
+                    row_dict['model'] = fresh_model
+                    row_dict['serial'] = fresh_serial or row_dict['serial']
+                    row_dict['vendor'] = fresh_vendor or row_dict.get('db_vendor')
+                    row_dict['hotswapped'] = (fresh_serial != row_dict['serial'])
+                else:
+                    row_dict['model'] = row_dict.get('db_model')
+                    row_dict['vendor'] = row_dict.get('db_vendor')
+                    row_dict['hotswapped'] = False
+
+            except:
+                # Fall back to database info on error
+                row_dict['model'] = row_dict.get('db_model')
+                row_dict['vendor'] = row_dict.get('db_vendor')
+                row_dict['hotswapped'] = False
+        else:
+            # Device not found, use database info
+            row_dict['model'] = row_dict.get('db_model')
+            row_dict['vendor'] = row_dict.get('db_vendor')
+            row_dict['hotswapped'] = False
+
+        # Get fresh size from blockdev
+        if device and os.path.exists(device):
+            try:
+                size_result = subprocess.run(
+                    ['blockdev', '--getsize64', device],
+                    capture_output=True,
+                    text=True,
+                    timeout=5
+                )
+                if size_result.stdout.strip():
+                    size_bytes = int(size_result.stdout.strip())
+                    row_dict['size_bytes'] = size_bytes
+                    row_dict['size_gb'] = round(size_bytes / (1024**3), 1)
+                elif row_dict.get('db_size_bytes'):
+                    row_dict['size_gb'] = round(row_dict['db_size_bytes'] / (1024**3), 1)
+                else:
+                    row_dict['size_gb'] = None
+            except:
+                if row_dict.get('db_size_bytes'):
+                    row_dict['size_gb'] = round(row_dict['db_size_bytes'] / (1024**3), 1)
+                else:
+                    row_dict['size_gb'] = None
+        else:
+            if row_dict.get('db_size_bytes'):
+                row_dict['size_gb'] = round(row_dict['db_size_bytes'] / (1024**3), 1)
+            else:
+                row_dict['size_gb'] = None
 
         # Add test type label
         test_type = row_dict.get('test_type')

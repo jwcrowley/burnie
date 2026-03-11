@@ -6,7 +6,15 @@
             <div class="flex items-center gap-4">
                 <div class="w-3 h-3 bg-primary-600 rounded-full animate-pulse"></div>
                 <div>
-                    <p class="font-mono text-sm text-gray-900 dark:text-white">{{ test.serial }}</p>
+                    <div class="flex items-center gap-2">
+                        <p class="font-mono text-sm text-gray-900 dark:text-white">{{ test.serial }}</p>
+                        {% if test.hotswapped %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-warning/10 text-warning" title="Disk was hotswapped - serial changed since test started">
+                            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                            Hotswapped
+                        </span>
+                        {% endif %}
+                    </div>
                     <p class="text-xs text-gray-500 dark:text-gray-400">{{ test.model or 'Unknown Model' }}{% if test.vendor %} ({{ test.vendor }}){% endif %}</p>
                 </div>
             </div>
