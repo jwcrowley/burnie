@@ -380,8 +380,8 @@
     // Update running count when HTMX updates
     document.body.addEventListener('htmx:afterSwap', function(evt) {
         if (evt.detail.target.id === 'running-tests-container') {
-            const runningRows = evt.detail.target.querySelectorAll('tbody tr');
-            document.getElementById('running-count').textContent = runningRows.length;
+            const runningDivs = evt.detail.target.querySelectorAll('.test-running');
+            document.getElementById('running-count').textContent = runningDivs.length;
         }
     });
 
