@@ -273,7 +273,7 @@ def get_stats_overview():
 
     # High temperature count (disks with temp > 45°C in last hour)
     high_temp_count = conn.execute("""
-        SELECT COUNT(DISTINCT disk_serial)
+        SELECT COUNT(DISTINCT serial)
         FROM temperature_history
         WHERE timestamp >= datetime('now', '-1 hour')
         AND temperature > 45
