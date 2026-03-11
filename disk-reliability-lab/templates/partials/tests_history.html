@@ -1,0 +1,36 @@
+<div class="overflow-x-auto">
+    <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+        <thead class="bg-gray-50 dark:bg-gray-900">
+            <tr>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Serial</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Model</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Device</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Started</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Finished</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Result</th>
+            </tr>
+        </thead>
+        <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+            {% for test in tests %}
+            <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer" onclick="window.location.href='/disks/{{ test.serial }}'">
+                <td class="px-4 py-3 text-sm font-mono text-primary-600 dark:text-primary-400">{{ test.serial }}</td>
+                <td class="px-4 py-3 text-sm text-gray-900 dark:text-white">{{ test.model or '-' }}</td>
+                <td class="px-4 py-3 text-sm font-mono text-gray-600 dark:text-gray-400">{{ test.device or '-' }}</td>
+                <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{{ test.started or '-' }}</td>
+                <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{{ test.finished or '-' }}</td>
+                <td class="px-4 py-3 text-sm">
+                    <span class="status-badge status-{{ test.result or 'unknown' }}">
+                        {{ (test.result or 'unknown')|title }}
+                    </span>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="6" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                    No test history found.
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>

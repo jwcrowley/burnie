@@ -1,0 +1,59 @@
+{% if alerts %}
+<div class="divide-y divide-gray-200 dark:divide-gray-700">
+    {% for alert in alerts %}
+    <div class="alert-card alert-{{ alert.severity }} p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer"
+         onclick="window.location.href='/disks/{{ alert.serial }}'">
+        <div class="flex items-start justify-between">
+            <div class="flex items-start gap-3">
+                <!-- Icon -->
+                <div class="mt-1">
+                    {% if alert.type == 'reliability' %}
+                    <svg class="w-5 h-5 text-{% if alert.severity == 'critical' %}red-600{% else %}orange-500{% endif %}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    {% elif alert.type == 'temperature' %}
+                    <svg class="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z"></path></svg>
+                    {% elif alert.type == 'latency' %}
+                    <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                    {% else %}
+                    <svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    {% endif %}
+                </div>
+
+                <!-- Content -->
+                <div>
+                    <div class="flex items-center gap-2">
+                        <span class="font-mono text-sm text-gray-900 dark:text-white">{{ alert.serial }}</span>
+                        <span class="text-xs px-2 py-0.5 rounded-full
+                            {% if alert.severity == 'critical' %}bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400
+                            {% elif alert.severity == 'error' %}bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400
+                            {% elif alert.severity == 'warning' %}bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400
+                            {% endif %}">
+                            {{ alert.severity|title }}
+                        </span>
+                    </div>
+                    <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">{{ alert.message }}</p>
+                    {% if alert.model %}
+                    <p class="text-xs text-gray-500 dark:text-gray-500 mt-1">{{ alert.model }}</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="flex items-center gap-2">
+                <button class="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded" title="Dismiss">
+                    <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+        </div>
+
+        {% if alert.timestamp %}
+        <p class="text-xs text-gray-400 dark:text-gray-500 mt-2">{{ alert.timestamp }}</p>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="p-8 text-center text-gray-500 dark:text-gray-400">
+    <svg class="w-12 h-12 mx-auto mb-3 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+    <p>No alerts found</p>
+</div>
+{% endif %}

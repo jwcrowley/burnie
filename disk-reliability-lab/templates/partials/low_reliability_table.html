@@ -1,0 +1,25 @@
+{% if disks %}
+<div class="divide-y divide-gray-200 dark:divide-gray-700">
+    {% for disk in disks[:5] %}
+    <div class="p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer"
+         onclick="window.location.href='/disks/{{ disk.serial }}'">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                    <span class="text-sm font-bold text-red-600 dark:text-red-400">{{ disk.reliability_score }}</span>
+                </div>
+                <div>
+                    <p class="font-mono text-sm text-gray-900 dark:text-white">{{ disk.serial }}</p>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">{{ disk.model or 'Unknown Model' }}</p>
+                </div>
+            </div>
+            <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="p-4 text-center text-gray-500 dark:text-gray-400">
+    <p class="text-sm">All disks are within acceptable reliability thresholds.</p>
+</div>
+{% endif %}

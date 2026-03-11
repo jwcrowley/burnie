@@ -1,0 +1,387 @@
+{% extends "base.html" %}
+
+{% block title %}Analytics - Disk Reliability Lab{% endblock %}
+
+{% block nav-analytics %}active{% endblock %}
+
+{% block head %}
+<style>
+    .chart-container {
+        position: relative;
+        height: 350px;
+    }
+    .stat-card {
+        transition: all 0.2s;
+    }
+    .stat-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+    <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Analytics</h1>
+    <p class="text-gray-600 dark:text-gray-400">Reliability trends and insights</p>
+</div>
+
+<!-- Time Range Selector -->
+<div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-6">
+    <div class="flex flex-wrap gap-2">
+        <button class="time-range-btn active" data-range="7">7 Days</button>
+        <button class="time-range-btn" data-range="30">30 Days</button>
+        <button class="time-range-btn" data-range="90">90 Days</button>
+        <button class="time-range-btn" data-range="365">1 Year</button>
+        <button class="time-range-btn" data-range="all">All Time</button>
+    </div>
+</div>
+
+<!-- Summary Stats -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm text-gray-500 dark:text-gray-400">Total Disks Tested</p>
+                <p id="stat-total-disks" class="text-2xl font-bold text-gray-900 dark:text-white">-</p>
+            </div>
+            <div class="p-3 bg-primary-100 dark:bg-primary-900 rounded-full">
+                <svg class="w-6 h-6 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"></path></svg>
+            </div>
+        </div>
+    </div>
+
+    <div class="stat-card bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm text-gray-500 dark:text-gray-400">Average Score</p>
+                <p id="stat-avg-score" class="text-2xl font-bold text-gray-900 dark:text-white">-</p>
+            </div>
+            <div class="p-3 bg-success/10 rounded-full">
+                <svg class="w-6 h-6 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            </div>
+        </div>
+    </div>
+
+    <div class="stat-card bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm text-gray-500 dark:text-gray-400">Pass Rate</p>
+                <p id="stat-pass-rate" class="text-2xl font-bold text-gray-900 dark:text-white">-</p>
+            </div>
+            <div class="p-3 bg-blue-100 dark:bg-blue-900 rounded-full">
+                <svg class="w-6 h-6 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+            </div>
+        </div>
+    </div>
+
+    <div class="stat-card bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm text-gray-500 dark:text-gray-400">Tests Completed</p>
+                <p id="stat-tests" class="text-2xl font-bold text-gray-900 dark:text-white">-</p>
+            </div>
+            <div class="p-3 bg-purple-100 dark:bg-purple-900 rounded-full">
+                <svg class="w-6 h-6 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path></svg>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <!-- Reliability Trend -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Reliability Trend</h2>
+        <div class="chart-container">
+            <canvas id="reliabilityTrendChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Test Volume -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Test Volume</h2>
+        <div class="chart-container">
+            <canvas id="testVolumeChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <!-- Vendor Comparison -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Vendor Reliability</h2>
+        <div class="chart-container">
+            <canvas id="vendorComparisonChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Model Comparison -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Model Reliability (Top 10)</h2>
+        <div class="chart-container">
+            <canvas id="modelComparisonChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <!-- Score Distribution -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Score Distribution</h2>
+        <div class="chart-container">
+            <canvas id="scoreDistributionChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Batch Performance -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Batch Failure Rate</h2>
+        <div class="chart-container">
+            <canvas id="batchPerformanceChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- Interface Performance -->
+<div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+    <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Interface Performance Comparison</h2>
+    <div class="chart-container" style="height: 250px;">
+        <canvas id="interfaceChart"></canvas>
+    </div>
+</div>
+
+<!-- Temperature Analysis -->
+<div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+    <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Temperature Analysis</h2>
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div class="text-center p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
+            <p class="text-sm text-gray-500 dark:text-gray-400 mb-1">Average Temperature</p>
+            <p id="temp-avg" class="text-3xl font-bold text-gray-900 dark:text-white">-°C</p>
+        </div>
+        <div class="text-center p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
+            <p class="text-sm text-gray-500 dark:text-gray-400 mb-1">Peak Temperature</p>
+            <p id="temp-max" class="text-3xl font-bold text-danger">-°C</p>
+        </div>
+        <div class="text-center p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
+            <p class="text-sm text-gray-500 dark:text-gray-400 mb-1">Overheating Disks</p>
+            <p id="temp-overheating" class="text-3xl font-bold text-warning">-</p>
+        </div>
+    </div>
+    <div class="mt-4" style="height: 200px;">
+        <canvas id="tempDistributionChart"></canvas>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let currentRange = 30;
+
+    // Time range button handling
+    document.querySelectorAll('.time-range-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.time-range-btn').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            currentRange = this.dataset.range === 'all' ? 365 * 5 : parseInt(this.dataset.range);
+            loadCharts();
+        });
+    });
+
+    // Load all charts
+    async function loadCharts() {
+        const days = currentRange === 'all' ? 365 * 5 : currentRange;
+
+        // Overview stats
+        const overview = await fetch(`/api/stats/overview`).then(r => r.json());
+        document.getElementById('stat-total-disks').textContent = overview.total_disks;
+        document.getElementById('stat-avg-score').textContent = overview.average_score;
+
+        const passCount = overview.total_disks - overview.low_reliability_count;
+        const passRate = overview.total_disks > 0 ? ((passCount / overview.total_disks) * 100).toFixed(1) : 0;
+        document.getElementById('stat-pass-rate').textContent = passRate + '%';
+
+        // Tests summary
+        const testsSummary = await fetch(`/api/tests/summary`).then(r => r.json());
+        document.getElementById('stat-tests').textContent = testsSummary.total_tests;
+
+        // Timeline data
+        const timeline = await fetch(`/api/stats/timeline?days=${days}`).then(r => r.json());
+
+        // Reliability Trend Chart
+        const reliabilityCtx = document.getElementById('reliabilityTrendChart').getContext('2d');
+        if (window.reliabilityTrendChart) window.reliabilityTrendChart.destroy();
+        window.reliabilityTrendChart = new Chart(reliabilityCtx, {
+            type: 'line',
+            data: {
+                labels: timeline.map(d => d.date),
+                datasets: [{
+                    label: 'Average Score',
+                    data: timeline.map(d => d.avg_score),
+                    borderColor: '#10b981',
+                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { min: 0, max: 100 }
+                }
+            }
+        });
+
+        // Test Volume Chart
+        const volumeCtx = document.getElementById('testVolumeChart').getContext('2d');
+        if (window.testVolumeChart) window.testVolumeChart.destroy();
+        window.testVolumeChart = new Chart(volumeCtx, {
+            type: 'bar',
+            data: {
+                labels: timeline.map(d => d.date),
+                datasets: [{
+                    label: 'Tests Per Day',
+                    data: timeline.map(d => d.test_count),
+                    backgroundColor: '#0ea5e9'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+
+        // Vendor Comparison
+        const vendorData = await fetch(`/api/stats/vendor`).then(r => r.json());
+        const vendorCtx = document.getElementById('vendorComparisonChart').getContext('2d');
+        if (window.vendorChart) window.vendorChart.destroy();
+        window.vendorChart = new Chart(vendorCtx, {
+            type: 'bar',
+            data: {
+                labels: vendorData.map(d => d.vendor),
+                datasets: [{
+                    label: 'Avg Score',
+                    data: vendorData.map(d => d.avg_score),
+                    backgroundColor: vendorData.map(d => {
+                        if (d.avg_score >= 90) return '#10b981';
+                        if (d.avg_score >= 70) return '#3b82f6';
+                        return '#f59e0b';
+                    })
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                indexAxis: 'y',
+                scales: {
+                    x: { min: 0, max: 100 }
+                }
+            }
+        });
+
+        // Model Comparison
+        const modelData = await fetch(`/api/stats/model`).then(r => r.json());
+        const modelCtx = document.getElementById('modelComparisonChart').getContext('2d');
+        if (window.modelChart) window.modelChart.destroy();
+        window.modelChart = new Chart(modelCtx, {
+            type: 'bar',
+            data: {
+                labels: modelData.slice(0, 10).map(d => d.model),
+                datasets: [{
+                    label: 'Avg Score',
+                    data: modelData.slice(0, 10).map(d => d.avg_score),
+                    backgroundColor: modelData.slice(0, 10).map(d => {
+                        if (d.avg_score >= 90) return '#10b981';
+                        if (d.avg_score >= 70) return '#3b82f6';
+                        return '#f59e0b';
+                    })
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                indexAxis: 'y',
+                scales: {
+                    x: { min: 0, max: 100 }
+                }
+            }
+        });
+
+        // Score Distribution
+        const scoreDist = overview.score_distribution;
+        const scoreCtx = document.getElementById('scoreDistributionChart').getContext('2d');
+        if (window.scoreDistChart) window.scoreDistChart.destroy();
+        window.scoreDistChart = new Chart(scoreCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['90-100', '70-89', '50-69', '30-49', '0-29'],
+                datasets: [{
+                    data: [
+                        scoreDist['90-100'] || 0,
+                        scoreDist['70-89'] || 0,
+                        scoreDist['50-69'] || 0,
+                        scoreDist['30-49'] || 0,
+                        scoreDist['0-29'] || 0
+                    ],
+                    backgroundColor: ['#10b981', '#3b82f6', '#f59e0b', '#f97316', '#ef4444']
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'right' }
+                }
+            }
+        });
+
+        // Batch Performance
+        const batchData = await fetch(`/api/stats/batch`).then(r => r.json());
+        const batchCtx = document.getElementById('batchPerformanceChart').getContext('2d');
+        if (window.batchChart) window.batchChart.destroy();
+        window.batchChart = new Chart(batchCtx, {
+            type: 'bar',
+            data: {
+                labels: batchData.map(d => d.batch),
+                datasets: [{
+                    label: 'Failure Rate %',
+                    data: batchData.map(d => d.failure_rate),
+                    backgroundColor: batchData.map(d => {
+                        if (d.failure_rate > 20) return '#ef4444';
+                        if (d.failure_rate > 10) return '#f59e0b';
+                        return '#10b981';
+                    })
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { beginAtZero: true, max: 100 }
+                }
+            }
+        });
+
+        // Temperature stats
+        document.getElementById('temp-avg').textContent = (overview.avg_temperature || '-') + '°C';
+        document.getElementById('temp-max').textContent = (overview.max_temperature || '-') + '°C';
+    }
+
+    // Initial load
+    loadCharts();
+
+    // Update theme when changed
+    document.getElementById('theme-toggle').addEventListener('click', function() {
+        setTimeout(() => {
+            const isDark = document.documentElement.classList.contains('dark');
+            Chart.defaults.color = isDark ? '#9ca3af' : '#6b7280';
+            Chart.defaults.borderColor = isDark ? '#374151' : '#e5e7eb';
+            Object.values(window).filter(obj => obj instanceof Chart).forEach(c => c.update());
+        }, 10);
+    });
+</script>
+{% endblock %}

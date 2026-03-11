@@ -1,0 +1,43 @@
+{% for disk in disks %}
+<tr class="disk-row cursor-pointer" onclick="window.location.href='/disks/{{ disk.serial }}'">
+    <td class="px-4 py-3 text-sm font-mono text-primary-600 dark:text-primary-400">{{ disk.serial }}</td>
+    <td class="px-4 py-3 text-sm text-gray-900 dark:text-white">{{ disk.model or '-' }}</td>
+    <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{{ disk.vendor or '-' }}</td>
+    <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+        {% if disk.size_bytes %}
+            {% set tb = disk.size_bytes / 1099511627776 %}
+            {{ '%.1f'|format(tb) }} TB
+        {% else %}-{% endif %}
+    </td>
+    <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{{ disk.interface or '-' }}</td>
+    <td class="px-4 py-3 text-sm">
+        <span class="status-badge status-{{ disk.status or 'unknown' }}">
+            {{ (disk.status or 'unknown')|title }}
+        </span>
+    </td>
+    <td class="px-4 py-3 text-sm">
+        {% if disk.reliability_score is not none %}
+        <span class="score-badge inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
+            {% if disk.reliability_score >= 90 %}bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400
+            {% elif disk.reliability_score >= 70 %}bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400
+            {% elif disk.reliability_score >= 50 %}bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400
+            {% else %}bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400
+            {% endif %}">
+            {{ disk.reliability_score }}
+        </span>
+        {% else %}-{% endif %}
+    </td>
+    <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+        {% if disk.last_test %}{{ disk.last_test[:10] }}{% else %}-{% endif %}
+    </td>
+    <td class="px-4 py-3 text-right text-sm">
+        <a href="/disks/{{ disk.serial }}" class="text-primary-600 hover:text-primary-700" onclick="event.stopPropagation()">View</a>
+    </td>
+</tr>
+{% else %}
+<tr>
+    <td colspan="9" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+        No disks found matching the current filters.
+    </td>
+</tr>
+{% endif %}

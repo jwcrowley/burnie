@@ -1,0 +1,258 @@
+{% extends "base.html" %}
+
+{% block title %}Alerts - Disk Reliability Lab{% endblock %}
+
+{% block nav-alerts %}active{% endblock %}
+
+{% block head %}
+<style>
+    .alert-card {
+        transition: all 0.2s;
+        border-left: 4px solid transparent;
+    }
+    .alert-card:hover {
+        transform: translateX(4px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+    .alert-critical {
+        border-left-color: #dc2626;
+    }
+    .alert-error {
+        border-left-color: #ef4444;
+    }
+    .alert-warning {
+        border-left-color: #f59e0b;
+    }
+    .filter-btn.active {
+        background-color: #0ea5e9;
+        color: white;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div>
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Alerts</h1>
+        <p class="text-gray-600 dark:text-gray-400">Monitor issues and anomalies</p>
+    </div>
+    <div class="flex gap-2">
+        <button id="dismiss-all-btn" class="btn-secondary">Dismiss All</button>
+        <button class="btn-primary" hx-get="/partials/alerts/table" hx-target="#alerts-container">Refresh</button>
+    </div>
+</div>
+
+<!-- Alert Summary Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm text-gray-500 dark:text-gray-400">Critical</p>
+                <p id="count-critical" class="text-2xl font-bold text-critical">-</p>
+            </div>
+            <div class="p-3 bg-red-100 dark:bg-red-900/30 rounded-full">
+                <svg class="w-6 h-6 text-critical" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm text-gray-500 dark:text-gray-400">Errors</p>
+                <p id="count-error" class="text-2xl font-bold text-danger">-</p>
+            </div>
+            <div class="p-3 bg-red-100 dark:bg-red-900/30 rounded-full">
+                <svg class="w-6 h-6 text-danger" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm text-gray-500 dark:text-gray-400">Warnings</p>
+                <p id="count-warning" class="text-2xl font-bold text-warning">-</p>
+            </div>
+            <div class="p-3 bg-yellow-100 dark:bg-yellow-900/30 rounded-full">
+                <svg class="w-6 h-6 text-warning" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm text-gray-500 dark:text-gray-400">Total Alerts</p>
+                <p id="count-total" class="text-2xl font-bold text-gray-900 dark:text-white">-</p>
+            </div>
+            <div class="p-3 bg-gray-100 dark:bg-gray-700 rounded-full">
+                <svg class="w-6 h-6 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-6">
+    <div class="flex flex-wrap gap-2">
+        <button class="filter-btn active" data-type="">All</button>
+        <button class="filter-btn" data-type="critical">Critical</button>
+        <button class="filter-btn" data-type="error">Errors</button>
+        <button class="filter-btn" data-type="warning">Warnings</button>
+        <span class="mx-2 text-gray-400">|</span>
+        <button class="filter-btn" data-type="reliability">Reliability</button>
+        <button class="filter-btn" data-type="temperature">Temperature</button>
+        <button class="filter-btn" data-type="latency">Latency</button>
+        <button class="filter-btn" data-type="test">Tests</button>
+    </div>
+</div>
+
+<!-- Alerts Container -->
+<div id="alerts-container"
+     hx-get="/partials/alerts/table?limit=100"
+     hx-trigger="load, every {{ refresh_interval }}s"
+     hx-indicator="#alerts-loading">
+    <div id="alerts-loading" class="flex justify-center py-8">
+        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+    </div>
+</div>
+
+<!-- Alert Statistics -->
+<div class="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Alert Trend -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Alert Trend (7 Days)</h2>
+        <div style="height: 250px;">
+            <canvas id="alertTrendChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Alert Type Distribution -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Alerts by Type</h2>
+        <div style="height: 250px;">
+            <canvas id="alertTypeChart"></canvas>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let currentFilter = '';
+
+    // Filter button handling
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            currentFilter = this.dataset.type;
+
+            // Update alerts container
+            htmx.ajax('GET', `/partials/alerts/table?limit=100&alert_type=${currentFilter}`, '#alerts-container');
+        });
+    });
+
+    // Update alert counts
+    function updateAlertCounts() {
+        fetch('/api/alerts?limit=1000')
+            .then(r => r.json())
+            .then(alerts => {
+                const critical = alerts.filter(a => a.severity === 'critical').length;
+                const error = alerts.filter(a => a.severity === 'error').length;
+                const warning = alerts.filter(a => a.severity === 'warning').length;
+
+                document.getElementById('count-critical').textContent = critical;
+                document.getElementById('count-error').textContent = error;
+                document.getElementById('count-warning').textContent = warning;
+                document.getElementById('count-total').textContent = alerts.length;
+
+                // Update charts
+                updateAlertCharts(alerts);
+            });
+    }
+
+    function updateAlertCharts(alerts) {
+        // Alert Type Distribution
+        const typeCounts = {};
+        alerts.forEach(a => {
+            typeCounts[a.type] = (typeCounts[a.type] || 0) + 1;
+        });
+
+        const typeCtx = document.getElementById('alertTypeChart').getContext('2d');
+        if (window.alertTypeChart) window.alertTypeChart.destroy();
+        window.alertTypeChart = new Chart(typeCtx, {
+            type: 'doughnut',
+            data: {
+                labels: Object.keys(typeCounts).map(t => t.charAt(0).toUpperCase() + t.slice(1)),
+                datasets: [{
+                    data: Object.values(typeCounts),
+                    backgroundColor: {
+                        reliability: '#ef4444',
+                        temperature: '#f59e0b',
+                        latency: '#3b82f6',
+                        test: '#8b5cf6'
+                    }
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'right' }
+                }
+            }
+        });
+
+        // Alert Trend (mock data for now - would need historical data)
+        const trendCtx = document.getElementById('alertTrendChart').getContext('2d');
+        if (window.alertTrendChart) window.alertTrendChart.destroy();
+        window.alertTrendChart = new Chart(trendCtx, {
+            type: 'line',
+            data: {
+                labels: ['6d ago', '5d ago', '4d ago', '3d ago', '2d ago', 'Yesterday', 'Today'],
+                datasets: [
+                    {
+                        label: 'Critical',
+                        data: [2, 3, 1, 4, 2, 3, critical],
+                        borderColor: '#dc2626',
+                        tension: 0.4,
+                        fill: false
+                    },
+                    {
+                        label: 'Warning',
+                        data: [5, 4, 6, 3, 5, 4, warning],
+                        borderColor: '#f59e0b',
+                        tension: 0.4,
+                        fill: false
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+    }
+
+    // Initial load
+    updateAlertCounts();
+
+    // Refresh counts periodically
+    setInterval(updateAlertCounts, {{ refresh_interval }} * 1000);
+
+    // Update theme when changed
+    document.getElementById('theme-toggle').addEventListener('click', function() {
+        setTimeout(() => {
+            const isDark = document.documentElement.classList.contains('dark');
+            Chart.defaults.color = isDark ? '#9ca3af' : '#6b7280';
+            Chart.defaults.borderColor = isDark ? '#374151' : '#e5e7eb';
+            Object.values(window).filter(obj => obj instanceof Chart).forEach(c => c.update());
+        }, 10);
+    });
+</script>
+{% endblock %}
