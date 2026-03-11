@@ -369,6 +369,52 @@
         // Temperature stats
         document.getElementById('temp-avg').textContent = (overview.avg_temperature || '-') + '°C';
         document.getElementById('temp-max').textContent = (overview.max_temperature || '-') + '°C';
+        document.getElementById('temp-overheating').textContent = overview.high_temp_count || 0;
+
+        // Interface Performance Chart
+        const interfaceData = await fetch(`/api/stats/interface`).then(r => r.json());
+        const interfaceCtx = document.getElementById('interfaceChart').getContext('2d');
+        if (window.interfaceChart) window.interfaceChart.destroy();
+        window.interfaceChart = new Chart(interfaceCtx, {
+            type: 'bar',
+            data: {
+                labels: interfaceData.map(d => d.interface_type || 'Unknown'),
+                datasets: [{
+                    label: 'Avg Score',
+                    data: interfaceData.map(d => d.avg_score),
+                    backgroundColor: '#0ea5e9'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { min: 0, max: 100 }
+                }
+            }
+        });
+
+        // Temperature Distribution Chart
+        const tempDistCtx = document.getElementById('tempDistributionChart').getContext('2d');
+        if (window.tempDistChart) window.tempDistChart.destroy();
+        window.tempDistChart = new Chart(tempDistCtx, {
+            type: 'bar',
+            data: {
+                labels: ['< 35°C', '35-40°C', '40-45°C', '45-50°C', '> 50°C'],
+                datasets: [{
+                    label: 'Disk Count',
+                    data: [0, 0, 0, 0, 0], // TODO: Implement temperature distribution API
+                    backgroundColor: ['#10b981', '#3b82f6', '#f59e0b', '#f97316', '#ef4444']
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { beginAtZero: true }
+                }
+            }
+        });
     }
 
     // Initial load

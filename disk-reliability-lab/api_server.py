@@ -271,6 +271,14 @@ def get_stats_overview():
         WHERE timestamp >= datetime('now', '-1 hour')
     """).fetchone()
 
+    # High temperature count (disks with temp > 45°C in last hour)
+    high_temp_count = conn.execute("""
+        SELECT COUNT(DISTINCT disk_serial)
+        FROM temperature_history
+        WHERE timestamp >= datetime('now', '-1 hour')
+        AND temperature > 45
+    """).fetchone()[0]
+
     # Reliability score distribution
     score_dist = conn.execute("""
         SELECT
@@ -299,6 +307,7 @@ def get_stats_overview():
         "recent_tests_24h": recent_tests,
         "avg_temperature": round(temp_stats[0], 1) if temp_stats[0] else None,
         "max_temperature": temp_stats[1],
+        "high_temp_count": high_temp_count,
         "score_distribution": {row[0]: row[1] for row in score_dist}
     }
 
@@ -395,6 +404,34 @@ def get_stats_batch():
             "avg_score": round(row[2], 1) if row[2] else None,
             "failed_count": row[3],
             "failure_rate": round((row[3] / row[1] * 100), 1) if row[1] > 0 else 0
+        }
+        for row in rows
+    ]
+
+
+@app.get("/stats/interface")
+def get_stats_interface():
+    """Get reliability statistics grouped by interface type."""
+    conn = get_db()
+
+    query = """
+        SELECT
+            interface_type,
+            COUNT(*) as disk_count,
+            AVG(reliability_score) as avg_score
+        FROM disks
+        WHERE interface_type IS NOT NULL AND reliability_score IS NOT NULL
+        GROUP BY interface_type
+        ORDER BY avg_score DESC
+    """
+    rows = conn.execute(query).fetchall()
+    conn.close()
+
+    return [
+        {
+            "interface_type": row[0],
+            "disk_count": row[1],
+            "avg_score": round(row[2], 1) if row[2] else None
         }
         for row in rows
     ]
