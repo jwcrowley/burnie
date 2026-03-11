@@ -1018,7 +1018,7 @@ async def start_test(request: Request):
                 content={"detail": f"Device not found: {device}"}
             )
 
-        # Get device info for serial
+        # Get device info for serial, model, vendor
         try:
             serial_result = subprocess.run(
                 ['smartctl', '-i', device],
@@ -1028,17 +1028,59 @@ async def start_test(request: Request):
             )
             serial = None
             model = None
+            vendor = None
             for line in serial_result.stdout.split('\n'):
                 if 'Serial Number:' in line or 'Serial number:' in line:
                     serial = line.split(':', 1)[1].strip()
                 if 'Device Model:' in line:
                     model = line.split(':', 1)[1].strip()
+                if 'Vendor:' in line or 'Model Family:' in line:
+                    vendor_part = line.split(':', 1)[1].strip()
+                    # Extract vendor from model family or vendor line
+                    if not vendor:
+                        vendor = vendor_part.split()[0] if vendor_part else None
         except:
             serial = os.path.basename(device)
             model = "Unknown"
+            vendor = None
+
+        # Get disk size for record
+        size_bytes = None
+        try:
+            size_result = subprocess.run(
+                ['blockdev', '--getsize64', device],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            size_bytes = int(size_result.stdout.strip()) if size_result.stdout.strip() else None
+        except:
+            pass
+
+        # Create or update disk record, then create test record
+        conn = get_db()
+
+        # Check if disk exists
+        existing = conn.execute("SELECT serial FROM disks WHERE serial = ?", (serial,)).fetchone()
+
+        if existing:
+            # Update existing disk
+            conn.execute("""
+                UPDATE disks SET
+                    model = ?,
+                    vendor = ?,
+                    status = 'testing',
+                    last_test = datetime('now')
+                WHERE serial = ?
+            """, (model, vendor, serial))
+        else:
+            # Insert new disk
+            conn.execute("""
+                INSERT INTO disks (serial, model, vendor, size_bytes, interface, first_seen, status)
+                VALUES (?, ?, ?, ?, ?, datetime('now'), 'testing')
+            """, (serial, model, vendor, size_bytes, None))
 
         # Create test record
-        conn = get_db()
         conn.execute("""
             INSERT INTO tests (serial, device, started, result)
             VALUES (?, ?, datetime('now'), 'running')
@@ -1051,6 +1093,7 @@ async def start_test(request: Request):
             "device": device,
             "serial": serial,
             "model": model,
+            "vendor": vendor,
             "message": f"Burn-in test started on {device}"
         }
 
