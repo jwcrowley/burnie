@@ -44,7 +44,8 @@ async def proxy_request(method: str, path: str, request: Request):
     """Proxy API requests to the backend server."""
     async with httpx.AsyncClient() as client:
         # Build URL and forward request
-        url = f"{API_BASE_URL}/api/{path}"
+        # Remove /api prefix since the backend doesn't use it
+        url = f"{API_BASE_URL}/{path}"
 
         # Forward query parameters
         query_params = str(request.url.query)
