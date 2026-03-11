@@ -416,12 +416,12 @@ def get_stats_interface():
 
     query = """
         SELECT
-            interface_type,
+            interface,
             COUNT(*) as disk_count,
             AVG(reliability_score) as avg_score
         FROM disks
-        WHERE interface_type IS NOT NULL AND reliability_score IS NOT NULL
-        GROUP BY interface_type
+        WHERE interface IS NOT NULL AND reliability_score IS NOT NULL
+        GROUP BY interface
         ORDER BY avg_score DESC
     """
     rows = conn.execute(query).fetchall()
