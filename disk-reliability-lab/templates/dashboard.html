@@ -26,14 +26,16 @@
 </div>
 
 <!-- Stats Cards -->
-<div id="stats-overview"
-     hx-get="/partials/stats/overview"
-     hx-trigger="load, every {{ refresh_interval }}s"
-     hx-indicator="#stats-loading"
-     class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-    <!-- Stats will be loaded here -->
-    <div id="stats-loading" class="col-span-full flex justify-center py-8">
-        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+    <div id="stats-overview"
+         hx-get="/partials/stats/overview"
+         hx-trigger="load, every {{ refresh_interval }}s"
+         hx-indicator="#stats-loading"
+         hx-swap="innerHTML">
+        <!-- Stats will be loaded here -->
+        <div id="stats-loading" class="col-span-full flex justify-center py-8">
+            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+        </div>
     </div>
 </div>
 
