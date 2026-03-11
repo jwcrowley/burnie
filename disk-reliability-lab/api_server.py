@@ -857,14 +857,17 @@ def get_available_disks():
     import re
 
     try:
-        # Get list of block devices
+        # Get list of all block devices with mount info
         result = subprocess.run(
-            ['lsblk', '-d', '-n', '-o', 'NAME,SIZE,TYPE,MOUNTPOINT'],
+            ['lsblk', '-n', '-o', 'NAME,SIZE,TYPE,MOUNTPOINT'],
             capture_output=True,
             text=True
         )
 
-        disks = []
+        # Track which disks have mounted partitions
+        mounted_disks = set()
+        all_disks = {}
+
         for line in result.stdout.strip().split('\n'):
             if not line:
                 continue
@@ -878,24 +881,36 @@ def get_available_disks():
             dtype = parts[2] if len(parts) > 2 else ''
             mountpoint = parts[3] if len(parts) > 3 else ''
 
-            # Skip loopback, raid, etc. - only physical disks
-            if dtype not in ['disk']:
-                continue
+            # Only consider physical disks
+            if dtype == 'disk':
+                all_disks[name] = {'size': size, 'type': dtype}
+                # Disk itself is mounted (rare but possible)
+                if mountpoint:
+                    mounted_disks.add(name)
+            # Check partitions - if mounted, mark parent disk as used
+            elif dtype in ['part']:
+                # Extract parent disk name (e.g., sda1 -> sda, nvme0n1p1 -> nvme0n1)
+                parent_disk = re.sub(r'p?\d+$', '', name)
+                if mountpoint:
+                    mounted_disks.add(parent_disk)
 
-            # Skip if mounted (likely in use)
-            if mountpoint:
-                continue
-
-            # Check if device exists
+        disks = []
+        for name, info in all_disks.items():
             device_path = f"/dev/{name}"
+
+            # Skip if any partition is mounted
+            if name in mounted_disks:
+                continue
+
+            # Skip if device doesn't exist
             if not os.path.exists(device_path):
                 continue
 
             disks.append({
                 "name": name,
                 "device": device_path,
-                "size": size,
-                "type": dtype
+                "size": info['size'],
+                "type": info['type']
             })
 
         return {"disks": disks}
