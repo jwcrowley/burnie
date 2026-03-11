@@ -147,26 +147,52 @@
             </button>
         </div>
         <div class="p-4 space-y-4">
+            <!-- Destructive Warning -->
+            <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-3">
+                <div class="flex">
+                    <svg class="w-5 h-5 text-red-400 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                    <div class="text-sm text-red-800 dark:text-red-200">
+                        <p class="font-semibold">DESTRUCTIVE TEST</p>
+                        <p class="mt-1">This test will write to every sector of the disk, overwriting all existing data. It cannot be undone.</p>
+                    </div>
+                </div>
+            </div>
+
             <!-- Available Disks -->
             <div>
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Available Disks</label>
                 <select id="disk-select" class="w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:border-primary-500 focus:ring-primary-500">
                     <option value="">Loading available disks...</option>
                 </select>
-                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Shows unmounted physical disks only</p>
+                <div class="flex items-center justify-between mt-1">
+                    <p id="disk-details" class="text-xs text-gray-500 dark:text-gray-400">Shows unmounted physical disks only</p>
+                    <button type="button" onclick="blinkDisk()" class="text-xs text-primary-600 hover:text-primary-700 flex items-center gap-1">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                        Blink Disk
+                    </button>
+                </div>
             </div>
             <div>
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Test Type</label>
-                <select class="w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:border-primary-500 focus:ring-primary-500">
-                    <option value="quick">Quick Test (SMART check)</option>
-                    <option value="short">Short Test (~2 minutes)</option>
-                    <option value="long">Long Test (~several hours)</option>
-                    <option value="burnin">Burn-in Test (full diagnostic)</option>
+                <select id="test-type" class="w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:border-primary-500 focus:ring-primary-500">
+                    <option value="quick">Quick Test (SMART check only, non-destructive)</option>
+                    <option value="short">Short Test (~2 minutes, non-destructive)</option>
+                    <option value="long">Long Test (~several hours, non-destructive)</option>
+                    <option value="burnin">Burn-in Test (full diagnostic, DESTRUCTIVE)</option>
                 </select>
             </div>
+
+            <!-- Confirmation Checkbox -->
+            <div class="flex items-start">
+                <input type="checkbox" id="confirm-destructive" class="mt-1 h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded">
+                <label for="confirm-destructive" class="ml-2 text-sm text-gray-700 dark:text-gray-300">
+                    I understand this will destroy all data on the selected disk
+                </label>
+            </div>
+
             <div class="flex gap-2 justify-end">
                 <button type="button" onclick="document.getElementById('new-test-modal').classList.add('hidden')" class="btn-secondary">Cancel</button>
-                <button type="button" onclick="startTest()" class="btn-primary">Start Test</button>
+                <button type="button" onclick="startTest()" class="btn-primary" id="start-test-btn" disabled>Start Test</button>
             </div>
         </div>
     </div>
@@ -175,6 +201,9 @@
 
 {% block scripts %}
 <script>
+    // Store available disks data
+    let availableDisks = [];
+
     // Open new test modal and load available disks
     async function openNewTestModal() {
         document.getElementById('new-test-modal').classList.remove('hidden');
@@ -186,12 +215,14 @@
             const response = await fetch('/api/system/available-disks');
             const data = await response.json();
 
-            if (data.disks && data.disks.length > 0) {
+            availableDisks = data.disks || [];
+
+            if (availableDisks.length > 0) {
                 diskSelect.innerHTML = '<option value="">Select a disk...</option>';
-                data.disks.forEach(disk => {
+                availableDisks.forEach(disk => {
                     const option = document.createElement('option');
                     option.value = disk.device;
-                    option.textContent = `${disk.name} (${disk.size})`;
+                    option.textContent = disk.display_name || `${disk.name} (${disk.size})`;
                     diskSelect.appendChild(option);
                 });
             } else {
@@ -203,13 +234,102 @@
         }
     }
 
-    // Start test function
-    async function startTest() {
+    // Update disk details when selection changes
+    document.addEventListener('DOMContentLoaded', function() {
+        const diskSelect = document.getElementById('disk-select');
+        const confirmCheckbox = document.getElementById('confirm-destructive');
+        const startBtn = document.getElementById('start-test-btn');
+
+        if (diskSelect) {
+            diskSelect.addEventListener('change', function() {
+                const selectedDevice = this.value;
+                const disk = availableDisks.find(d => d.device === selectedDevice);
+                const detailsEl = document.getElementById('disk-details');
+
+                if (disk) {
+                    let details = [];
+                    if (disk.serial && disk.serial !== 'Unknown') {
+                        details.push(`S/N: ${disk.serial}`);
+                    }
+                    if (disk.model) {
+                        details.push(`Model: ${disk.model}`);
+                    }
+                    if (disk.tran) {
+                        details.push(`Interface: ${disk.tran.toUpperCase()}`);
+                    }
+                    detailsEl.textContent = details.join(' | ') || `Size: ${disk.size}`;
+                } else {
+                    detailsEl.textContent = 'Shows unmounted physical disks only';
+                }
+            });
+        }
+
+        if (confirmCheckbox) {
+            confirmCheckbox.addEventListener('change', function() {
+                startBtn.disabled = !this.checked;
+            });
+        }
+    });
+
+    // Blink disk to identify it physically
+    async function blinkDisk() {
         const diskSelect = document.getElementById('disk-select');
         const device = diskSelect.value;
 
         if (!device) {
+            alert('Please select a disk first');
+            return;
+        }
+
+        const disk = availableDisks.find(d => d.device === device);
+        const diskInfo = disk ? disk.display_name || disk.name : device;
+
+        if (!confirm(`Blink activity LED on:\n${diskInfo}\n\nThis will cause the disk's activity light to blink for 10 seconds. Watch the drive to identify it.`)) {
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/system/blink-disk', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ device: device })
+            });
+
+            if (response.ok) {
+                alert('Blinking started!\n\nWatch for the drive activity light. It will blink in a 1-second on/off pattern for 10 seconds.');
+            } else {
+                const error = await response.json();
+                alert(`Failed to blink: ${error.detail || 'Unknown error'}`);
+            }
+        } catch (error) {
+            alert(`Error: ${error.message}`);
+        }
+    }
+
+    // Start test function
+    async function startTest() {
+        const diskSelect = document.getElementById('disk-select');
+        const testTypeSelect = document.getElementById('test-type');
+        const device = diskSelect.value;
+        const testType = testTypeSelect ? testTypeSelect.value : 'burnin';
+
+        if (!device) {
             alert('Please select a disk');
+            return;
+        }
+
+        const confirmCheckbox = document.getElementById('confirm-destructive');
+        if (!confirmCheckbox.checked) {
+            alert('Please confirm that you understand this will destroy all data on the disk.');
+            return;
+        }
+
+        // Final confirmation
+        const disk = availableDisks.find(d => d.device === device);
+        const diskInfo = disk ? disk.display_name || disk.name : device;
+        if (!confirm(`Start ${testType} test on:\n${diskInfo}\n\nThis will destroy all data on the disk. Continue?`)) {
             return;
         }
 
@@ -219,17 +339,22 @@
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ device: device })
+                body: JSON.stringify({ device: device, test_type: testType })
             });
 
             if (response.ok) {
-                alert(`Burn-in test started on ${device}\n\nThis will take several hours. Monitor progress in the Running Tests section.`);
+                const result = await response.json();
+                alert(`${testType.toUpperCase()} test started!\n\nDevice: ${device}\nSerial: ${result.serial || 'Unknown'}\n\nThis will take several hours. Monitor progress in the Running Tests section.`);
                 document.getElementById('new-test-modal').classList.add('hidden');
+                // Reset form
+                confirmCheckbox.checked = false;
+                document.getElementById('start-test-btn').disabled = true;
                 // Refresh running tests
                 setTimeout(() => location.reload(), 2000);
             } else {
                 const error = await response.json();
-                alert(`Failed to start test: ${error.detail || 'Unknown error'}`);
+                const errorMsg = error.detail || 'Unknown error';
+                alert(`Failed to start test:\n\n${errorMsg}`);
             }
         } catch (error) {
             alert(`Error: ${error.message}`);

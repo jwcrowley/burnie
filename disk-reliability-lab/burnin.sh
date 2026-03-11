@@ -1,6 +1,23 @@
 #!/bin/bash
-set -euo pipefail
+set -eo pipefail
 source config.env
+
+if [ -z "${1:-}" ]; then
+    echo "Usage: $0 <device>"
+    echo "Example: $0 /dev/sdb"
+    echo ""
+    echo "WARNING: This is a DESTRUCTIVE test that will:"
+    echo "  - Write to every sector of the disk"
+    echo "  - Overwrite all existing data"
+    echo "  - Take several hours to complete"
+    echo ""
+    read -p "Continue? (yes/no): " confirm
+    if [ "$confirm" != "yes" ]; then
+        echo "Aborted."
+        exit 1
+    fi
+    exit 1
+fi
 
 DRIVE=$1
 

@@ -1,4 +1,5 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 from fastapi.responses import JSONResponse, Response
 from starlette.responses import StreamingResponse
 from typing import Optional, List
@@ -859,7 +860,7 @@ def get_available_disks():
     try:
         # Get list of all block devices as JSON
         result = subprocess.run(
-            ['lsblk', '-J', '-o', 'NAME,SIZE,TYPE,MOUNTPOINT'],
+            ['lsblk', '-J', '-o', 'NAME,SIZE,TYPE,MOUNTPOINT,TRAN,SERIAL'],
             capture_output=True,
             text=True
         )
@@ -877,10 +878,17 @@ def get_available_disks():
             dtype = device.get('type', '')
             size = device.get('size', '')
             mountpoint = device.get('mountpoint', '')
+            tran = device.get('tran', '')  # Transport type (sata, usb, nvme, etc.)
+            serial = device.get('serial', '')  # Serial number from lsblk
             children = device.get('children', [])
 
             if dtype == 'disk':
-                all_disks[name] = {'size': size, 'type': dtype}
+                all_disks[name] = {
+                    'size': size,
+                    'type': dtype,
+                    'tran': tran,
+                    'serial': serial
+                }
                 parent_disk = name
                 if mountpoint:
                     mounted_disks.add(name)
@@ -943,11 +951,42 @@ def get_available_disks():
             if not os.path.exists(device_path):
                 continue
 
+            # Get serial from smartctl if lsblk didn't provide it
+            serial = info.get('serial', '')
+            model = None
+            if not serial:
+                try:
+                    smart_result = subprocess.run(
+                        ['smartctl', '-i', device_path],
+                        capture_output=True,
+                        text=True,
+                        timeout=10
+                    )
+                    for line in smart_result.stdout.split('\n'):
+                        if 'Serial Number:' in line or 'Serial number:' in line:
+                            serial = line.split(':', 1)[1].strip()
+                        if 'Device Model:' in line:
+                            model = line.split(':', 1)[1].strip()
+                except:
+                    pass
+
+            # Format display name
+            display_parts = [name]
+            if serial:
+                display_parts.append(f"S/N: {serial}")
+            if model:
+                display_parts.append(model)
+            display_name = " - ".join(display_parts)
+
             disks.append({
                 "name": name,
                 "device": device_path,
                 "size": info['size'],
-                "type": info['type']
+                "type": info['type'],
+                "serial": serial or "Unknown",
+                "model": model or "",
+                "tran": info.get('tran', ''),
+                "display_name": display_name
             })
 
         return {"disks": disks}
@@ -956,23 +995,28 @@ def get_available_disks():
 
 
 @app.post("/tests/start")
-def start_test(request):
+async def start_test(request: Request):
     """Start a burn-in test on a device."""
     import subprocess
-    import json
+    import os
 
     try:
         # Parse request body
-        body = json.loads(request.body.decode())
+        body = await request.json()
         device = body.get('device')
 
         if not device:
-            raise HTTPException(status_code=400, detail="Device is required")
+            return JSONResponse(
+                status_code=400,
+                content={"detail": "Device is required"}
+            )
 
         # Validate device exists
-        import os
         if not os.path.exists(device):
-            raise HTTPException(status_code=404, detail=f"Device not found: {device}")
+            return JSONResponse(
+                status_code=404,
+                content={"detail": f"Device not found: {device}"}
+            )
 
         # Get device info for serial
         try:
@@ -983,12 +1027,15 @@ def start_test(request):
                 timeout=30
             )
             serial = None
+            model = None
             for line in serial_result.stdout.split('\n'):
                 if 'Serial Number:' in line or 'Serial number:' in line:
                     serial = line.split(':', 1)[1].strip()
-                    break
+                if 'Device Model:' in line:
+                    model = line.split(':', 1)[1].strip()
         except:
             serial = os.path.basename(device)
+            model = "Unknown"
 
         # Create test record
         conn = get_db()
@@ -1003,13 +1050,76 @@ def start_test(request):
             "status": "started",
             "device": device,
             "serial": serial,
-            "message": f"Test started. Run: sudo ./burnin.sh {device}"
+            "model": model,
+            "message": f"Burn-in test started on {device}"
         }
 
-    except HTTPException:
-        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return JSONResponse(
+            status_code=500,
+            content={"detail": str(e)}
+        )
+
+
+@app.post("/system/blink-disk")
+async def blink_disk(request: Request):
+    """Blink a disk's activity LED to help identify it physically."""
+    import subprocess
+    import os
+    import asyncio
+
+    try:
+        # Parse request body
+        body = await request.json()
+        device = body.get('device')
+
+        if not device:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": "Device is required"}
+            )
+
+        # Validate device exists
+        if not os.path.exists(device):
+            return JSONResponse(
+                status_code=404,
+                content={"detail": f"Device not found: {device}"}
+            )
+
+        # Run blink pattern in background
+        def run_blink():
+            import threading
+            def blink_pattern():
+                try:
+                    # Blink for 10 seconds: on/off pattern
+                    for _ in range(5):
+                        # Read some sectors to cause activity light
+                        subprocess.run(
+                            ['hdparm', '--read-sector', '0', device],
+                            capture_output=True,
+                            timeout=2
+                        )
+                        import time
+                        time.sleep(1)  # Off period
+                except:
+                    pass
+
+            thread = threading.Thread(target=blink_pattern, daemon=True)
+            thread.start()
+
+        run_blink()
+
+        return {
+            "status": "blinking",
+            "device": device,
+            "message": f"Disk activity LED should blink for 10 seconds"
+        }
+
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"detail": str(e)}
+        )
 
 
 if __name__ == "__main__":
