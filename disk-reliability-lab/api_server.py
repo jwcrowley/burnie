@@ -431,6 +431,44 @@ def get_stats_timeline(days: int = 30):
     ]
 
 
+@app.get("/temperature/summary")
+def get_temperature_summary():
+    """Get temperature summary statistics."""
+    conn = get_db()
+
+    # Get recent temperature stats
+    temp_stats = conn.execute("""
+        SELECT AVG(temperature) as avg_temp,
+               MAX(temperature) as max_temp,
+               COUNT(*) as reading_count
+        FROM temperature_history
+        WHERE timestamp >= datetime('now', '-1 hour')
+    """).fetchone()
+
+    # Get disks with high temperatures
+    high_temp_disks = conn.execute("""
+        SELECT DISTINCT dh.serial, d.model, dh.temperature
+        FROM temperature_history dh
+        JOIN disks d ON d.serial = dh.serial
+        WHERE dh.timestamp >= datetime('now', '-1 hour')
+            AND dh.temperature > 45
+        ORDER BY dh.temperature DESC
+        LIMIT 10
+    """).fetchall()
+
+    conn.close()
+
+    return {
+        "avg_temperature": round(temp_stats[0], 1) if temp_stats and temp_stats[0] else None,
+        "max_temperature": temp_stats[1] if temp_stats else None,
+        "reading_count": temp_stats[2] if temp_stats else 0,
+        "high_temp_disks": [
+            {"serial": row[0], "model": row[1], "temperature": row[2]}
+            for row in high_temp_disks
+        ]
+    }
+
+
 # ============================================================================
 # Alerts Endpoints
 # ============================================================================
