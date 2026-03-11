@@ -3,10 +3,7 @@ version: '3'
 services:
 
  api:
-  image: python:3.11
-  volumes:
-   - .:/lab
-  working_dir: /lab
+  build: .
   command: python3 api_server.py
   ports:
    - "8000:8000"
@@ -16,10 +13,7 @@ services:
    - ALERT_TEMPERATURE_THRESHOLD=45
 
  dashboard:
-  image: python:3.11
-  volumes:
-   - .:/lab
-  working_dir: /lab
+  build: .
   command: python3 web_dashboard.py
   ports:
    - "8080:8080"
