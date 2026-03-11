@@ -634,7 +634,7 @@ def get_running_tests():
     query = """
         SELECT t.*, d.model, d.vendor
         FROM tests t
-        JOIN disks d ON d.serial = t.serial
+        LEFT JOIN disks d ON d.serial = t.serial
         WHERE t.finished IS NULL
         ORDER BY t.started ASC
     """
