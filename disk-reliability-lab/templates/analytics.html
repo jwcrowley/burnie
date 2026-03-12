@@ -188,6 +188,32 @@
         });
     });
 
+    // Helper to show "No data" message in chart container
+    function showNoData(canvasId, message = 'No data available') {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+        const container = canvas.parentElement;
+        canvas.style.display = 'none';
+        // Remove existing message if any
+        const existingMsg = container.querySelector('.no-data-message');
+        if (existingMsg) existingMsg.remove();
+        // Add message
+        const msg = document.createElement('div');
+        msg.className = 'no-data-message flex items-center justify-center h-full text-gray-400 dark:text-gray-500 text-sm';
+        msg.textContent = message;
+        container.appendChild(msg);
+    }
+
+    // Helper to hide "No data" message and show canvas
+    function hideNoData(canvasId) {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+        canvas.style.display = 'block';
+        const container = canvas.parentElement;
+        const msg = container.querySelector('.no-data-message');
+        if (msg) msg.remove();
+    }
+
     // Load all charts
     async function loadCharts() {
         const days = currentRange === 'all' ? 365 * 5 : currentRange;
@@ -211,160 +237,198 @@
         // Reliability Trend Chart
         const reliabilityCtx = document.getElementById('reliabilityTrendChart').getContext('2d');
         if (window.reliabilityTrendChart) window.reliabilityTrendChart.destroy();
-        window.reliabilityTrendChart = new Chart(reliabilityCtx, {
-            type: 'line',
-            data: {
-                labels: timeline.map(d => d.date),
-                datasets: [{
-                    label: 'Average Score',
-                    data: timeline.map(d => d.avg_score),
-                    borderColor: '#10b981',
-                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                    fill: true,
-                    tension: 0.4
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    y: { min: 0, max: 100 }
+
+        if (timeline.length === 0) {
+            showNoData('reliabilityTrendChart', 'No reliability trend data yet - complete more burn-in tests');
+        } else {
+            hideNoData('reliabilityTrendChart');
+            window.reliabilityTrendChart = new Chart(reliabilityCtx, {
+                type: 'line',
+                data: {
+                    labels: timeline.map(d => d.date),
+                    datasets: [{
+                        label: 'Average Score',
+                        data: timeline.map(d => d.avg_score),
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { min: 0, max: 100 }
+                    }
                 }
-            }
-        });
+            });
+        }
 
         // Test Volume Chart
         const volumeCtx = document.getElementById('testVolumeChart').getContext('2d');
         if (window.testVolumeChart) window.testVolumeChart.destroy();
-        window.testVolumeChart = new Chart(volumeCtx, {
-            type: 'bar',
-            data: {
-                labels: timeline.map(d => d.date),
-                datasets: [{
-                    label: 'Tests Per Day',
-                    data: timeline.map(d => d.test_count),
-                    backgroundColor: '#0ea5e9'
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    y: { beginAtZero: true }
+
+        if (timeline.length === 0) {
+            showNoData('testVolumeChart', 'No test data yet - start running tests');
+        } else {
+            hideNoData('testVolumeChart');
+            window.testVolumeChart = new Chart(volumeCtx, {
+                type: 'bar',
+                data: {
+                    labels: timeline.map(d => d.date),
+                    datasets: [{
+                        label: 'Tests Per Day',
+                        data: timeline.map(d => d.test_count),
+                        backgroundColor: '#0ea5e9'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
                 }
-            }
-        });
+            });
+        }
 
         // Vendor Comparison
         const vendorData = await fetch(`/api/stats/vendor`).then(r => r.json());
         const vendorCtx = document.getElementById('vendorComparisonChart').getContext('2d');
         if (window.vendorChart) window.vendorChart.destroy();
-        window.vendorChart = new Chart(vendorCtx, {
-            type: 'bar',
-            data: {
-                labels: vendorData.map(d => d.vendor),
-                datasets: [{
-                    label: 'Avg Score',
-                    data: vendorData.map(d => d.avg_score),
-                    backgroundColor: vendorData.map(d => {
-                        if (d.avg_score >= 90) return '#10b981';
-                        if (d.avg_score >= 70) return '#3b82f6';
-                        return '#f59e0b';
-                    })
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                indexAxis: 'y',
-                scales: {
-                    x: { min: 0, max: 100 }
+
+        if (vendorData.length === 0) {
+            showNoData('vendorComparisonChart', 'No vendor data yet - complete burn-in tests first');
+        } else {
+            hideNoData('vendorComparisonChart');
+            window.vendorChart = new Chart(vendorCtx, {
+                type: 'bar',
+                data: {
+                    labels: vendorData.map(d => d.vendor),
+                    datasets: [{
+                        label: 'Avg Score',
+                        data: vendorData.map(d => d.avg_score),
+                        backgroundColor: vendorData.map(d => {
+                            if (d.avg_score >= 90) return '#10b981';
+                            if (d.avg_score >= 70) return '#3b82f6';
+                            return '#f59e0b';
+                        })
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    scales: {
+                        x: { min: 0, max: 100 }
+                    }
                 }
-            }
-        });
+            });
+        }
 
         // Model Comparison
         const modelData = await fetch(`/api/stats/model`).then(r => r.json());
         const modelCtx = document.getElementById('modelComparisonChart').getContext('2d');
         if (window.modelChart) window.modelChart.destroy();
-        window.modelChart = new Chart(modelCtx, {
-            type: 'bar',
-            data: {
-                labels: modelData.slice(0, 10).map(d => d.model),
-                datasets: [{
-                    label: 'Avg Score',
-                    data: modelData.slice(0, 10).map(d => d.avg_score),
-                    backgroundColor: modelData.slice(0, 10).map(d => {
-                        if (d.avg_score >= 90) return '#10b981';
-                        if (d.avg_score >= 70) return '#3b82f6';
-                        return '#f59e0b';
-                    })
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                indexAxis: 'y',
-                scales: {
-                    x: { min: 0, max: 100 }
+
+        if (modelData.length === 0) {
+            showNoData('modelComparisonChart', 'No model data yet - complete burn-in tests first');
+        } else {
+            hideNoData('modelComparisonChart');
+            window.modelChart = new Chart(modelCtx, {
+                type: 'bar',
+                data: {
+                    labels: modelData.slice(0, 10).map(d => d.model),
+                    datasets: [{
+                        label: 'Avg Score',
+                        data: modelData.slice(0, 10).map(d => d.avg_score),
+                        backgroundColor: modelData.slice(0, 10).map(d => {
+                            if (d.avg_score >= 90) return '#10b981';
+                            if (d.avg_score >= 70) return '#3b82f6';
+                            return '#f59e0b';
+                        })
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    scales: {
+                        x: { min: 0, max: 100 }
+                    }
                 }
-            }
-        });
+            });
+        }
 
         // Score Distribution
-        const scoreDist = overview.score_distribution;
+        const scoreDist = overview.score_distribution || {};
         const scoreCtx = document.getElementById('scoreDistributionChart').getContext('2d');
         if (window.scoreDistChart) window.scoreDistChart.destroy();
-        window.scoreDistChart = new Chart(scoreCtx, {
-            type: 'doughnut',
-            data: {
-                labels: ['90-100', '70-89', '50-69', '30-49', '0-29'],
-                datasets: [{
-                    data: [
-                        scoreDist['90-100'] || 0,
-                        scoreDist['70-89'] || 0,
-                        scoreDist['50-69'] || 0,
-                        scoreDist['30-49'] || 0,
-                        scoreDist['0-29'] || 0
-                    ],
-                    backgroundColor: ['#10b981', '#3b82f6', '#f59e0b', '#f97316', '#ef4444']
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { position: 'right' }
+
+        const scoreValues = [
+            scoreDist['90-100'] || 0,
+            scoreDist['70-89'] || 0,
+            scoreDist['50-69'] || 0,
+            scoreDist['30-49'] || 0,
+            scoreDist['0-29'] || 0
+        ];
+
+        if (scoreValues.every(v => v === 0)) {
+            showNoData('scoreDistributionChart', 'No scored disks yet - complete burn-in tests first');
+        } else {
+            hideNoData('scoreDistributionChart');
+            window.scoreDistChart = new Chart(scoreCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['90-100', '70-89', '50-69', '30-49', '0-29'],
+                    datasets: [{
+                        data: scoreValues,
+                        backgroundColor: ['#10b981', '#3b82f6', '#f59e0b', '#f97316', '#ef4444']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'right' }
+                    }
                 }
-            }
-        });
+            });
+        }
 
         // Batch Performance
         const batchData = await fetch(`/api/stats/batch`).then(r => r.json());
         const batchCtx = document.getElementById('batchPerformanceChart').getContext('2d');
         if (window.batchChart) window.batchChart.destroy();
-        window.batchChart = new Chart(batchCtx, {
-            type: 'bar',
-            data: {
-                labels: batchData.map(d => d.batch),
-                datasets: [{
-                    label: 'Failure Rate %',
-                    data: batchData.map(d => d.failure_rate),
-                    backgroundColor: batchData.map(d => {
-                        if (d.failure_rate > 20) return '#ef4444';
-                        if (d.failure_rate > 10) return '#f59e0b';
-                        return '#10b981';
-                    })
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    y: { beginAtZero: true, max: 100 }
+
+        if (batchData.length === 0) {
+            showNoData('batchPerformanceChart', 'No batch data yet - add batch information to disks');
+        } else {
+            hideNoData('batchPerformanceChart');
+            window.batchChart = new Chart(batchCtx, {
+                type: 'bar',
+                data: {
+                    labels: batchData.map(d => d.batch || 'Unknown'),
+                    datasets: [{
+                        label: 'Failure Rate %',
+                        data: batchData.map(d => d.failure_rate),
+                        backgroundColor: batchData.map(d => {
+                            if (d.failure_rate > 20) return '#ef4444';
+                            if (d.failure_rate > 10) return '#f59e0b';
+                            return '#10b981';
+                        })
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { beginAtZero: true, max: 100 }
+                    }
                 }
-            }
-        });
+            });
+        }
 
         // Temperature stats
         document.getElementById('temp-avg').textContent = (overview.avg_temperature || '-') + '°C';
@@ -375,46 +439,35 @@
         const interfaceData = await fetch(`/api/stats/interface`).then(r => r.json());
         const interfaceCtx = document.getElementById('interfaceChart').getContext('2d');
         if (window.interfaceChart) window.interfaceChart.destroy();
-        window.interfaceChart = new Chart(interfaceCtx, {
-            type: 'bar',
-            data: {
-                labels: interfaceData.map(d => d.interface_type || 'Unknown'),
-                datasets: [{
-                    label: 'Avg Score',
-                    data: interfaceData.map(d => d.avg_score),
-                    backgroundColor: '#0ea5e9'
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    y: { min: 0, max: 100 }
+
+        if (interfaceData.length === 0) {
+            showNoData('interfaceChart', 'No interface data yet - complete burn-in tests first');
+        } else {
+            hideNoData('interfaceChart');
+            window.interfaceChart = new Chart(interfaceCtx, {
+                type: 'bar',
+                data: {
+                    labels: interfaceData.map(d => d.interface_type || 'Unknown'),
+                    datasets: [{
+                        label: 'Avg Score',
+                        data: interfaceData.map(d => d.avg_score),
+                        backgroundColor: '#0ea5e9'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { min: 0, max: 100 }
+                    }
                 }
-            }
-        });
+            });
+        }
 
         // Temperature Distribution Chart
         const tempDistCtx = document.getElementById('tempDistributionChart').getContext('2d');
         if (window.tempDistChart) window.tempDistChart.destroy();
-        window.tempDistChart = new Chart(tempDistCtx, {
-            type: 'bar',
-            data: {
-                labels: ['< 35°C', '35-40°C', '40-45°C', '45-50°C', '> 50°C'],
-                datasets: [{
-                    label: 'Disk Count',
-                    data: [0, 0, 0, 0, 0], // TODO: Implement temperature distribution API
-                    backgroundColor: ['#10b981', '#3b82f6', '#f59e0b', '#f97316', '#ef4444']
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    y: { beginAtZero: true }
-                }
-            }
-        });
+        showNoData('tempDistributionChart', 'Temperature distribution coming soon');
     }
 
     // Initial load

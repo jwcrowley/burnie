@@ -43,7 +43,7 @@
         <div class="flex items-center gap-6">
             <div class="text-center">
                 <div class="text-sm text-gray-500 dark:text-gray-400 mb-1">Reliability Score</div>
-                <div class="score-gauge {% if disk.reliability_score >= 90 %}text-success{% elif disk.reliability_score >= 70 %}text-primary-600{% elif disk.reliability_score >= 50 %}text-warning{% else %}text-danger{% endif %}">
+                <div class="score-gauge {% if disk.reliability_score is not none and disk.reliability_score >= 90 %}text-success{% elif disk.reliability_score is not none and disk.reliability_score >= 70 %}text-primary-600{% elif disk.reliability_score is not none and disk.reliability_score >= 50 %}text-warning{% elif disk.reliability_score is not none %}text-danger{% else %}text-gray-400{% endif %}">
                     <span class="text-4xl font-bold">{{ disk.reliability_score or 'N/A' }}</span>
                     <span class="text-lg">/100</span>
                 </div>
