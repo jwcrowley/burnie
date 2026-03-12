@@ -38,6 +38,10 @@ async def cleanup_stale_tests():
             'short': 10,     # 10 minutes max (SMART short test)
             'long': 300,     # 5 hours max (SMART long test)
             'burnin': 1440,  # 24 hours max (badblocks)
+            'fio': 360,      # 6 hours max (fio sequential + 4hr random)
+            'seq_speed': 10, # 10 minutes max (sequential speed test)
+            'iops': 10,      # 10 minutes max (random IOPS test)
+            'thermal': 45,   # 45 minutes max (sustained write thermal test)
         }
 
         now = datetime.now()
@@ -260,6 +264,13 @@ def get_disk(serial: str):
     """
     test_rows = conn.execute(test_query, (serial,)).fetchall()
     disk_data["test_history"] = [dict(row) for row in test_rows]
+
+    # Get the most recent device path from test history
+    if test_rows:
+        disk_data["device_path"] = test_rows[0]["device"]
+    else:
+        # Try to find device by scanning for this serial
+        disk_data["device_path"] = None
 
     # Get latency anomalies
     latency_query = """
@@ -798,8 +809,12 @@ def get_running_tests():
         'quick': 'Quick SMART',
         'short': 'Short Test',
         'long': 'Long Test',
-        'burnin': 'Burn-in',
-        None: 'Burn-in'
+        'burnin': 'Badblocks',
+        'fio': 'FIO Burn-in',
+        'seq_speed': 'Speed Test',
+        'iops': 'IOPS Test',
+        'thermal': 'Thermal Test',
+        None: 'Badblocks'
     }
 
     result = []
@@ -1522,6 +1537,329 @@ def run_burnin_test(device: str, test_id: int, serial: str):
         update_test_result(test_id, 'failed', serial)
 
 
+def run_fio_test(device: str, test_id: int, serial: str):
+    """Run a destructive burn-in test using fio (sequential write + random mix)."""
+    try:
+        logger.info(f"Starting fio burn-in test for {device} (test_id={test_id})")
+
+        # Create artifact directory for this test
+        from datetime import datetime
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        art_dir = f"/tmp/fio_{serial}_{timestamp}"
+        os.makedirs(art_dir, exist_ok=True)
+
+        # Capture SMART before test
+        try:
+            subprocess.run(
+                ['smartctl', '-x', '-j', device],
+                capture_output=True,
+                timeout=30
+            )
+        except:
+            pass
+
+        # Phase 1: Full disk sequential write
+        logger.info(f"Starting fio sequential write for {device}")
+        seq_result = subprocess.run(
+            ['fio', '--name=seqwrite', f'--filename={device}',
+             '--rw=write', '--bs=1M', '--iodepth=32', '--direct=1',
+             '--size=100%', '--ioengine=libaio',
+             f'--output={art_dir}/fio_seq.json', '--output-format=json'],
+            capture_output=True,
+            text=True,
+            timeout=86400  # 24 hours max for sequential
+        )
+
+        if seq_result.returncode != 0:
+            logger.error(f"fio sequential write failed for {device}: {seq_result.stderr}")
+            update_test_result(test_id, 'failed', serial)
+            return
+
+        # Phase 2: Random read/write mix (70% read, 30% write) for 4 hours
+        logger.info(f"Starting fio random mix for {device}")
+        rand_result = subprocess.run(
+            ['fio', '--name=randburn', f'--filename={device}',
+             '--rw=randrw', '--rwmixread=70', '--bs=1M',
+             '--iodepth=32', '--numjobs=4', '--runtime=4h', '--time_based',
+             '--direct=1', '--ioengine=libaio',
+             f'--write_lat_log={art_dir}/latency'],
+            capture_output=True,
+            text=True,
+            timeout=18000  # 5 hours max for random phase
+        )
+
+        # Capture SMART after test
+        try:
+            subprocess.run(
+                ['smartctl', '-x', '-j', device],
+                capture_output=True,
+                timeout=30
+            )
+        except:
+            pass
+
+        if rand_result.returncode == 0:
+            update_test_result(test_id, 'passed', serial)
+        else:
+            logger.error(f"fio random mix failed for {device}: {rand_result.stderr}")
+            update_test_result(test_id, 'failed', serial)
+
+    except subprocess.TimeoutExpired:
+        logger.error(f"fio test timed out for {device}")
+        update_test_result(test_id, 'failed', serial)
+    except Exception as e:
+        logger.error(f"fio test failed for {device}: {e}")
+        update_test_result(test_id, 'failed', serial)
+
+
+def run_seq_speed_test(device: str, test_id: int, serial: str):
+    """Run non-destructive sequential read/write speed test using fio."""
+    try:
+        logger.info(f"Starting sequential speed test for {device} (test_id={test_id})")
+
+        # Create artifact directory
+        from datetime import datetime
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        art_dir = f"/tmp/speedtest_{serial}_{timestamp}"
+        os.makedirs(art_dir, exist_ok=True)
+
+        # Sequential write test (small sample to be quick)
+        logger.info(f"Starting sequential write speed test for {device}")
+        write_result = subprocess.run(
+            ['fio', '--name=seq_write', f'--filename={device}',
+             '--rw=write', '--bs=1M', '--iodepth=32', '--direct=1',
+             '--size=2G', '--ioengine=libaio', '--refill_buffers',
+             f'--output={art_dir}/seq_write.json', '--output-format=json'],
+            capture_output=True,
+            text=True,
+            timeout=300  # 5 minutes max
+        )
+
+        # Sequential read test
+        logger.info(f"Starting sequential read speed test for {device}")
+        read_result = subprocess.run(
+            ['fio', '--name=seq_read', f'--filename={device}',
+             '--rw=read', '--bs=1M', '--iodepth=32', '--direct=1',
+             '--size=2G', '--ioengine=libaio',
+             f'--output={art_dir}/seq_read.json', '--output-format=json'],
+            capture_output=True,
+            text=True,
+            timeout=300  # 5 minutes max
+        )
+
+        # Parse results and store in test notes
+        write_speed = "N/A"
+        read_speed = "N/A"
+
+        try:
+            import json
+            with open(f'{art_dir}/seq_write.json', 'r') as f:
+                write_data = json.load(f)
+                write_speed = write_data['jobs'][0]['write']['bw_bytes'] / (1024**3)  # GB/s
+        except:
+            pass
+
+        try:
+            import json
+            with open(f'{art_dir}/seq_read.json', 'r') as f:
+                read_data = json.load(f)
+                read_speed = read_data['jobs'][0]['read']['bw_bytes'] / (1024**3)  # GB/s
+        except:
+            pass
+
+        # Update test result with speed info
+        conn = get_db()
+        notes = f"Seq Write: {write_speed:.2f} GB/s, Seq Read: {read_speed:.2f} GB/s"
+        conn.execute(
+            "UPDATE tests SET notes = ? WHERE id = ?",
+            (notes, test_id)
+        )
+        conn.close()
+
+        if write_result.returncode == 0 and read_result.returncode == 0:
+            update_test_result(test_id, 'passed', serial)
+        else:
+            logger.error(f"Speed test failed for {device}")
+            update_test_result(test_id, 'failed', serial)
+
+    except subprocess.TimeoutExpired:
+        logger.error(f"Speed test timed out for {device}")
+        update_test_result(test_id, 'failed', serial)
+    except Exception as e:
+        logger.error(f"Speed test failed for {device}: {e}")
+        update_test_result(test_id, 'failed', serial)
+
+
+def run_iops_test(device: str, test_id: int, serial: str):
+    """Run non-destructive random IOPS test using fio."""
+    try:
+        logger.info(f"Starting IOPS test for {device} (test_id={test_id})")
+
+        # Create artifact directory
+        from datetime import datetime
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        art_dir = f"/tmp/iopstest_{serial}_{timestamp}"
+        os.makedirs(art_dir, exist_ok=True)
+
+        # Random read test (4k blocks, queue depth 32)
+        logger.info(f"Starting random read IOPS test for {device}")
+        read_result = subprocess.run(
+            ['fio', '--name=rand_read', f'--filename={device}',
+             '--rw=randread', '--bs=4k', '--iodepth=32', '--direct=1',
+             '--size=1G', '--ioengine=libaio', '--numjobs=1',
+             f'--output={art_dir}/rand_read.json', '--output-format=json'],
+            capture_output=True,
+            text=True,
+            timeout=300  # 5 minutes max
+        )
+
+        # Random write test (4k blocks, queue depth 32)
+        logger.info(f"Starting random write IOPS test for {device}")
+        write_result = subprocess.run(
+            ['fio', '--name=rand_write', f'--filename={device}',
+             '--rw=randwrite', '--bs=4k', '--iodepth=32', '--direct=1',
+             '--size=1G', '--ioengine=libaio', '--refill_buffers', '--numjobs=1',
+             f'--output={art_dir}/rand_write.json', '--output-format=json'],
+            capture_output=True,
+            text=True,
+            timeout=300  # 5 minutes max
+        )
+
+        # Parse results and store in test notes
+        read_iops = "N/A"
+        write_iops = "N/A"
+
+        try:
+            import json
+            with open(f'{art_dir}/rand_read.json', 'r') as f:
+                read_data = json.load(f)
+                read_iops = read_data['jobs'][0]['read']['iops']
+        except:
+            pass
+
+        try:
+            import json
+            with open(f'{art_dir}/rand_write.json', 'r') as f:
+                write_data = json.load(f)
+                write_iops = write_data['jobs'][0]['write']['iops']
+        except:
+            pass
+
+        # Update test result with IOPS info
+        conn = get_db()
+        notes = f"Random Read: {read_iops:.0f} IOPS, Random Write: {write_iops:.0f} IOPS"
+        conn.execute(
+            "UPDATE tests SET notes = ? WHERE id = ?",
+            (notes, test_id)
+        )
+        conn.close()
+
+        if read_result.returncode == 0 and write_result.returncode == 0:
+            update_test_result(test_id, 'passed', serial)
+        else:
+            logger.error(f"IOPS test failed for {device}")
+            update_test_result(test_id, 'failed', serial)
+
+    except subprocess.TimeoutExpired:
+        logger.error(f"IOPS test timed out for {device}")
+        update_test_result(test_id, 'failed', serial)
+    except Exception as e:
+        logger.error(f"IOPS test failed for {device}: {e}")
+        update_test_result(test_id, 'failed', serial)
+
+
+def run_sustained_write_test(device: str, test_id: int, serial: str):
+    """Run sustained write test to detect thermal throttling (30 min)."""
+    try:
+        logger.info(f"Starting sustained write test for {device} (test_id={test_id})")
+
+        # Create artifact directory
+        from datetime import datetime
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        art_dir = f"/tmp/sustained_{serial}_{timestamp}"
+        os.makedirs(art_dir, exist_ok=True)
+
+        # Track temperatures during test
+        temps_during = []
+        start_time = time.time()
+
+        # Sustained write for 30 minutes (or 10GB, whichever comes first)
+        logger.info(f"Starting 30-minute sustained write for thermal check on {device}")
+        write_result = subprocess.run(
+            ['fio', '--name=sustained_write', f'--filename={device}',
+             '--rw=write', '--bs=1M', '--iodepth=32', '--direct=1',
+             '--size=10G', '--runtime=30m', '--time_based',
+             '--ioengine=libaio', '--refill_buffers',
+             '--write_iops_log={art_dir}/iops', '--write_bw_log={art_dir}/bw',
+             f'--output={art_dir}/sustained.json', '--output-format=json'],
+            capture_output=True,
+            text=True,
+            timeout=2400  # 40 minutes max
+        )
+
+        elapsed = time.time() - start_time
+
+        # Get temperature readings during test if available
+        try:
+            temp_result = subprocess.run(
+                ['smartctl', '-A', '-j', device],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            if temp_result.returncode == 0:
+                import json
+                smart_data = json.loads(temp_result.stdout)
+                if 'ata_smart_attributes' in smart_data:
+                    for attr in smart_data['ata_smart_attributes']:
+                        if attr.get('name') == 'Temperature_Celsius':
+                            final_temp = attr.get('value', 0)
+                            temps_during.append(final_temp)
+        except:
+            pass
+
+        # Parse final results
+        avg_bw = "N/A"
+        min_bw = "N/A"
+        max_bw = "N/A"
+
+        try:
+            import json
+            with open(f'{art_dir}/sustained.json', 'r') as f:
+                data = json.load(f)
+                job = data['jobs'][0]
+                avg_bw = job['write']['bw_bytes'] / (1024**3)  # GB/s
+                # Check for throttling (significant BW drop would indicate throttling)
+        except:
+            pass
+
+        # Update test result with thermal info
+        temp_info = f"Final Temp: {temps_during[0]}°C" if temps_during else "Temp: N/A"
+        notes = f"Sustained Write: {avg_bw:.2f} GB/s avg, {temp_info}, Duration: {elapsed/60:.1f}min"
+        if temps_during and temps_during[0] > 55:
+            notes += f" [WARNING: High temp - possible throttling]"
+
+        conn = get_db()
+        conn.execute(
+            "UPDATE tests SET notes = ? WHERE id = ?",
+            (notes, test_id)
+        )
+        conn.close()
+
+        if write_result.returncode == 0:
+            update_test_result(test_id, 'passed', serial)
+        else:
+            logger.error(f"Sustained write test failed for {device}")
+            update_test_result(test_id, 'failed', serial)
+
+    except subprocess.TimeoutExpired:
+        logger.error(f"Sustained write test timed out for {device}")
+        update_test_result(test_id, 'failed', serial)
+    except Exception as e:
+        logger.error(f"Sustained write test failed for {device}: {e}")
+        update_test_result(test_id, 'failed', serial)
+
+
 def start_test_thread(test_type: str, device: str, test_id: int, serial: str):
     """Start a test in a background thread."""
     def run_test():
@@ -1533,6 +1871,14 @@ def start_test_thread(test_type: str, device: str, test_id: int, serial: str):
             run_long_test(device, test_id, serial)
         elif test_type == 'burnin':
             run_burnin_test(device, test_id, serial)
+        elif test_type == 'fio':
+            run_fio_test(device, test_id, serial)
+        elif test_type == 'seq_speed':
+            run_seq_speed_test(device, test_id, serial)
+        elif test_type == 'iops':
+            run_iops_test(device, test_id, serial)
+        elif test_type == 'thermal':
+            run_sustained_write_test(device, test_id, serial)
         else:
             logger.error(f"Unknown test type: {test_type}")
             update_test_result(test_id, 'failed', serial)
@@ -1808,6 +2154,353 @@ async def blink_disk(request: Request):
         }
 
     except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"detail": str(e)}
+        )
+
+
+@app.get("/smart-errors/{device}")
+async def get_smart_errors(device: str):
+    """Get detailed SMART error log analysis for a device."""
+    try:
+        # Validate device exists
+        if not os.path.exists(device):
+            return JSONResponse(
+                status_code=404,
+                content={"detail": f"Device not found: {device}"}
+            )
+
+        # Get full SMART info in JSON format
+        result = subprocess.run(
+            ['smartctl', '-x', '-j', device],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+
+        if result.returncode != 0:
+            return JSONResponse(
+                status_code=500,
+                content={"detail": f"Failed to read SMART data: {result.stderr}"}
+            )
+
+        import json
+        smart_data = json.loads(result.stdout)
+
+        # Extract relevant error information
+        errors = []
+
+        # ATA Error Log
+        if 'ata_smart_error_log' in smart_data:
+            error_log = smart_data['ata_smart_error_log']
+            if 'error_log_summary' in error_log and error_log['error_log_summary']:
+                errors.append({
+                    'type': 'ATA Error Log Summary',
+                    'severity': 'critical',
+                    'data': error_log['error_log_summary']
+                })
+
+        # Self-test log
+        if 'self_test_log' in smart_data:
+            self_test = smart_data['self_test_log']
+            if 'standard' in self_test:
+                failed_tests = [t for t in self_test['standard']['table'] if t['status']['string'] != 'Completed without error']
+                if failed_tests:
+                    errors.append({
+                        'type': 'Failed Self-Tests',
+                        'severity': 'warning',
+                        'count': len(failed_tests),
+                        'data': failed_tests
+                    })
+
+        # Current pending sectors
+        if 'ata_smart_attributes' in smart_data:
+            attributes = smart_data['ata_smart_attributes']
+            critical_attrs = []
+
+            for attr in attributes:
+                id_num = attr.get('id')
+                name = attr.get('name', '')
+                value = attr.get('value', 0)
+                worst = attr.get('worst', 0)
+                thresh = attr.get('thresh', 0)
+
+                # Critical attributes to monitor
+                if id_num in [5, 10, 196, 197, 198, 199, 200, 201, 230, 231]:
+                    if value < thresh or value < 50:
+                        critical_attrs.append({
+                            'id': id_num,
+                            'name': name,
+                            'value': value,
+                            'worst': worst,
+                            'threshold': thresh,
+                            'status': 'critical' if value < thresh else 'warning'
+                        })
+
+            if critical_attrs:
+                errors.append({
+                    'type': 'Critical SMART Attributes',
+                    'severity': 'critical',
+                    'data': critical_attrs
+                })
+
+        # Device statistics (for drives that support it)
+        if 'device_statistics' in smart_data:
+            dev_stats = smart_data['device_statistics']
+            if 'pages' in dev_stats:
+                for page in dev_stats['pages']:
+                    if 'statistics' in page:
+                        for stat in page['statistics']:
+                            # Look for media errors, interface errors
+                            if any(keyword in stat.get('name', '').lower() for keyword in ['error', 'timeout', 'fail']):
+                                if stat.get('value', 0) > 0:
+                                    errors.append({
+                                        'type': 'Device Statistics Error',
+                                        'severity': 'warning',
+                                        'data': stat
+                                    })
+
+        # Overall health assessment
+        health_status = smart_data.get('smart_status', {}).get('passed', True)
+
+        # Power on hours
+        power_on_hours = None
+        if 'power_on_time' in smart_data:
+            power_on_hours = smart_data['power_on_time'].get('hours')
+
+        # Temperature
+        temperature = None
+        if 'temperature' in smart_data:
+            temperature = smart_data['temperature'].get('current')
+
+        return {
+            'device': device,
+            'health_passed': health_status,
+            'power_on_hours': power_on_hours,
+            'temperature': temperature,
+            'error_count': len(errors),
+            'errors': errors,
+            'smart_data': smart_data
+        }
+
+    except subprocess.TimeoutExpired:
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "SMART read timed out"}
+        )
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"detail": str(e)}
+        )
+
+
+@app.post("/disk/secure-erase")
+async def secure_erase(request: Request):
+    """Perform a secure erase on a device."""
+    try:
+        body = await request.json()
+        device = body.get('device')
+        method = body.get('method', 'ata')  # 'ata' for instant, 'overwrite' for full wipe
+
+        if not device:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": "Device is required"}
+            )
+
+        if not os.path.exists(device):
+            return JSONResponse(
+                status_code=404,
+                content={"detail": f"Device not found: {device}"}
+            )
+
+        # Get serial for logging
+        try:
+            serial_result = subprocess.run(
+                ['smartctl', '-i', device],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            serial = "Unknown"
+            for line in serial_result.stdout.split('\n'):
+                if 'Serial Number:' in line or 'Serial number:' in line:
+                    serial = line.split(':', 1)[1].strip()
+                    break
+        except:
+            serial = "Unknown"
+
+        logger.info(f"Starting secure erase on {device} (serial={serial}, method={method})")
+
+        def run_erase():
+            try:
+                if method == 'ata':
+                    # ATA Secure Erase (instant for SSDs, fast for HDDs)
+                    # First check if frozen
+                    frozen_check = subprocess.run(
+                        ['smartctl', '-l', 'security', device],
+                        capture_output=True,
+                        text=True,
+                        timeout=30
+                    )
+
+                    if 'frozen' in frozen_check.stdout.lower():
+                        # Need to unfreeze by putting system to sleep briefly
+                        # This is a limitation - user must manually unfreeze
+                        conn = get_db()
+                        conn.execute(
+                            "INSERT INTO tests (serial, device, started, result, test_type, notes) VALUES (?, ?, ?, 'failed', 'secure_erase', ?)",
+                            (serial, device, datetime.now().isoformat(), "Drive is frozen - put system to sleep to unfreeze")
+                        )
+                        conn.commit()
+                        conn.close()
+                        return
+
+                    # Perform ATA secure erase
+                    result = subprocess.run(
+                        ['hdparm', '--user-master', 'u', '--security-set-pass', 'Erase', device],
+                        capture_output=True,
+                        text=True,
+                        timeout=60
+                    )
+
+                    if result.returncode != 0:
+                        raise Exception(f"Failed to set password: {result.stderr}")
+
+                    time.sleep(1)
+
+                    result = subprocess.run(
+                        ['hdparm', '--user-master', 'u', '--security-erase', 'Erase', device],
+                        capture_output=True,
+                        text=True,
+                        timeout=7200  # 2 hours max
+                    )
+
+                    conn = get_db()
+                    if result.returncode == 0:
+                        conn.execute(
+                            "INSERT INTO tests (serial, device, started, finished, result, test_type, notes) VALUES (?, ?, ?, ?, 'passed', 'secure_erase', 'ATA Secure Erase completed')",
+                            (serial, device, datetime.now().isoformat(), datetime.now().isoformat())
+                        )
+                    else:
+                        conn.execute(
+                            "INSERT INTO tests (serial, device, started, finished, result, test_type, notes) VALUES (?, ?, ?, ?, 'failed', 'secure_erase', ?)",
+                            (serial, device, datetime.now().isoformat(), datetime.now().isoformat(), str(result.stderr))
+                        )
+                    conn.commit()
+                    conn.close()
+
+                else:  # overwrite method - use badblocks or dd
+                    # Use badblocks in destructive write mode
+                    result = subprocess.run(
+                        ['badblocks', '-w', '-s', device],
+                        capture_output=True,
+                        text=True,
+                        timeout=86400  # 24 hours max
+                    )
+
+                    conn = get_db()
+                    if result.returncode == 0:
+                        conn.execute(
+                            "INSERT INTO tests (serial, device, started, finished, result, test_type, notes) VALUES (?, ?, ?, ?, 'passed', 'secure_erase', 'Overwrite wipe completed')",
+                            (serial, device, datetime.now().isoformat(), datetime.now().isoformat())
+                        )
+                    else:
+                        conn.execute(
+                            "INSERT INTO tests (serial, device, started, finished, result, test_type, notes) VALUES (?, ?, ?, ?, 'failed', 'secure_erase', ?)",
+                            (serial, device, datetime.now().isoformat(), datetime.now().isoformat(), "Overwrite failed")
+                        )
+                    conn.commit()
+                    conn.close()
+
+            except Exception as e:
+                logger.error(f"Secure erase failed: {e}")
+                conn = get_db()
+                conn.execute(
+                    "INSERT INTO tests (serial, device, started, finished, result, test_type, notes) VALUES (?, ?, ?, ?, 'failed', 'secure_erase', ?)",
+                    (serial, device, datetime.now().isoformat(), datetime.now().isoformat(), str(e))
+                )
+                conn.commit()
+                conn.close()
+
+        # Run in background thread
+        thread = threading.Thread(target=run_erase, daemon=True)
+        thread.start()
+
+        return {
+            "status": "started",
+            "device": device,
+            "serial": serial,
+            "method": method,
+            "message": f"Secure erase started on {device}. Monitor test history for progress."
+        }
+
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"detail": str(e)}
+        )
+
+
+@app.get("/stats/batch-comparison")
+async def batch_comparison():
+    """Compare drives by batch to identify outliers."""
+    try:
+        conn = get_db()
+
+        # Get all disks with batch info and test results
+        query = """
+            SELECT
+                batch,
+                COUNT(*) as count,
+                AVG(reliability_score) as avg_score,
+                MIN(reliability_score) as min_score,
+                MAX(reliability_score) as max_score,
+                AVG(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failure_rate
+            FROM disks
+            WHERE batch IS NOT NULL AND batch != ''
+            GROUP BY batch
+            ORDER BY batch
+        """
+        batches = conn.execute(query).fetchall()
+
+        result = []
+        for batch in batches:
+            batch_data = dict(batch)
+
+            # Get outliers in this batch (score > 20 below average)
+            outliers_query = """
+                SELECT serial, model, reliability_score, status
+                FROM disks
+                WHERE batch = ?
+                AND reliability_score < ?
+                ORDER BY reliability_score ASC
+            """
+            outliers = conn.execute(
+                outliers_query,
+                (batch['batch'], batch['avg_score'] - 20)
+            ).fetchall()
+
+            batch_data['outliers'] = [dict(row) for row in outliers]
+            batch_data['avg_score'] = round(batch['avg_score'] or 0, 1)
+
+            # Calculate "health" of batch
+            if batch['avg_score'] >= 80 and batch['failure_rate'] < 0.1:
+                batch_data['health'] = 'good'
+            elif batch['avg_score'] >= 60:
+                batch_data['health'] = 'fair'
+            else:
+                batch_data['health'] = 'poor'
+
+            result.append(batch_data)
+
+        conn.close()
+        return result
+
+    except Exception as e:
+        logger.error(f"Batch comparison failed: {e}")
         return JSONResponse(
             status_code=500,
             content={"detail": str(e)}

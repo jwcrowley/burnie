@@ -151,6 +151,18 @@
     </div>
 </div>
 
+<!-- Batch Comparison -->
+<div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+    <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Batch Comparison</h2>
+    <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">Identify outliers and problematic batches</p>
+    <div id="batch-comparison-container">
+        <div class="text-center py-8">
+            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+            <p class="text-gray-500 dark:text-gray-400 mt-2">Loading batch data...</p>
+        </div>
+    </div>
+</div>
+
 <!-- Temperature Analysis -->
 <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
     <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Temperature Analysis</h2>
@@ -471,17 +483,98 @@
         if (window.tempDistChart && typeof window.tempDistChart.destroy === 'function') window.tempDistChart.destroy();
         showNoData('tempDistributionChart', 'Temperature distribution coming soon');
     }
-}
 
 // Wait for DOM to be ready before running
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
         loadCharts();
         setupThemeToggle();
+        loadBatchComparison();
     });
 } else {
     loadCharts();
     setupThemeToggle();
+    loadBatchComparison();
+}
+
+// Load batch comparison data
+async function loadBatchComparison() {
+    const container = document.getElementById('batch-comparison-container');
+    try {
+        const response = await fetch('/api/stats/batch-comparison');
+        if (response.ok) {
+            const batches = await response.json();
+
+            if (batches.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-8">
+                        <p class="text-gray-500 dark:text-gray-400">No batch data available</p>
+                        <p class="text-sm text-gray-400 dark:text-gray-500">Add batch information to disks to see comparisons</p>
+                    </div>
+                `;
+                return;
+            }
+
+            let html = '<div class="space-y-4">';
+            batches.forEach(batch => {
+                const healthColors = {
+                    'good': 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800',
+                    'fair': 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800',
+                    'poor': 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+                };
+                const healthBadges = {
+                    'good': '<span class="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">Good</span>',
+                    'fair': '<span class="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-xs font-medium">Fair</span>',
+                    'poor': '<span class="px-2 py-1 bg-red-100 text-red-800 rounded text-xs font-medium">Poor</span>'
+                };
+
+                html += `
+                    <div class="border rounded-lg p-4 ${healthColors[batch.health]}">
+                        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-2">
+                            <div>
+                                <h3 class="font-semibold text-gray-900 dark:text-white">Batch: ${batch.batch}</h3>
+                                <p class="text-sm text-gray-600 dark:text-gray-400">${batch.count} drives</p>
+                            </div>
+                            <div class="flex items-center gap-2 mt-2 sm:mt-0">
+                                ${healthBadges[batch.health]}
+                                <span class="text-sm">Avg Score: <strong>${batch.avg_score}</strong></span>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-3 gap-4 text-center text-sm">
+                            <div>
+                                <p class="text-gray-500 dark:text-gray-400">Min Score</p>
+                                <p class="font-medium">${batch.min_score || 'N/A'}</p>
+                            </div>
+                            <div>
+                                <p class="text-gray-500 dark:text-gray-400">Max Score</p>
+                                <p class="font-medium">${batch.max_score || 'N/A'}</p>
+                            </div>
+                            <div>
+                                <p class="text-gray-500 dark:text-gray-400">Failure Rate</p>
+                                <p class="font-medium">${(batch.failure_rate * 100).toFixed(1)}%</p>
+                            </div>
+                        </div>
+                        ${batch.outliers && batch.outliers.length > 0 ? `
+                            <div class="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                                <p class="text-sm font-medium text-red-600 dark:text-red-400 mb-2">⚠️ Outliers (>20 pts below avg):</p>
+                                <div class="flex flex-wrap gap-2">
+                                    ${batch.outliers.map(o => `
+                                        <span class="px-2 py-1 bg-red-100 dark:bg-red-900/30 rounded text-xs font-mono">
+                                            ${o.serial} (${o.reliability_score || 'N/A'})
+                                        </span>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            });
+            html += '</div>';
+            container.innerHTML = html;
+        }
+    } catch (error) {
+        container.innerHTML = `<p class="text-red-600">Error loading batch data: ${error.message}</p>`;
+    }
 }
 
 // Setup theme toggle listener

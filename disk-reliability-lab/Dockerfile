@@ -6,6 +6,8 @@ WORKDIR /lab
 RUN apt-get update && apt-get install -y \
     smartmontools \
     e2fsprogs \
+    fio \
+    hdparm \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install Python dependencies

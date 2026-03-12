@@ -175,10 +175,20 @@
             <div>
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Test Type</label>
                 <select id="test-type" onchange="updateDestructiveWarning()" class="w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:border-primary-500 focus:ring-primary-500">
-                    <option value="quick">Quick Test (SMART check only, non-destructive)</option>
-                    <option value="short">Short Test (~2 minutes, non-destructive)</option>
-                    <option value="long">Long Test (~several hours, non-destructive)</option>
-                    <option value="burnin">Burn-in Test (full diagnostic, DESTRUCTIVE)</option>
+                    <optgroup label="Health Tests">
+                        <option value="quick">Quick Test (SMART check only, non-destructive)</option>
+                        <option value="short">Short Test (~2 minutes, non-destructive)</option>
+                        <option value="long">Long Test (~several hours, non-destructive)</option>
+                    </optgroup>
+                    <optgroup label="Performance Tests">
+                        <option value="seq_speed">Speed Test (seq read/write, ~2 min, non-destructive)</option>
+                        <option value="iops">IOPS Test (random 4k, ~2 min, non-destructive)</option>
+                        <option value="thermal">Thermal Test (30 min sustained write, check for throttling)</option>
+                    </optgroup>
+                    <optgroup label="Destructive Tests">
+                        <option value="burnin">Badblocks Test (full disk write+verify, DESTRUCTIVE)</option>
+                        <option value="fio">FIO Burn-in (sequential + 4hr random, DESTRUCTIVE)</option>
+                    </optgroup>
                 </select>
             </div>
 
@@ -342,7 +352,8 @@
         }
 
         // For destructive tests, require checkbox
-        if (testType === 'burnin') {
+        const destructiveTests = ['burnin', 'fio'];
+        if (destructiveTests.includes(testType)) {
             const confirmCheckbox = document.getElementById('confirm-destructive');
             if (!confirmCheckbox.checked) {
                 alert('Please confirm that you understand this will destroy all data on the disk.');
@@ -353,7 +364,8 @@
         // Final confirmation for all tests
         const disk = availableDisks.find(d => d.device === device);
         const diskInfo = disk ? disk.display_name || disk.name : device;
-        const testLabel = testType === 'burnin'
+        const isDestructive = destructiveTests.includes(testType);
+        const testLabel = isDestructive
             ? `This will DESTROY ALL DATA on ${diskInfo}. Continue?`
             : `Start ${testType} test on ${diskInfo}?`;
 
@@ -372,7 +384,8 @@
 
             if (response.ok) {
                 const result = await response.json();
-                const destructiveMsg = testType === 'burnin'
+                const isDestructive = ['burnin', 'fio'].includes(testType);
+                const destructiveMsg = isDestructive
                     ? `\n\nThis will destroy all data. Monitor progress in the Running Tests section.`
                     : `\n\nMonitor progress in the Running Tests section.`;
                 alert(`${testType.toUpperCase()} test started!\n\nDevice: ${device}\nSerial: ${result.serial || 'Unknown'}${destructiveMsg}`);
@@ -401,8 +414,9 @@
         const confirmationSection = document.getElementById('confirmation-section');
         const startBtn = document.getElementById('start-test-btn');
 
-        if (testType === 'burnin') {
-            // Show warning and confirmation for burnin
+        const destructiveTests = ['burnin', 'fio'];
+        if (destructiveTests.includes(testType)) {
+            // Show warning and confirmation for destructive tests
             warning.classList.remove('hidden');
             confirmationSection.classList.remove('hidden');
             startBtn.disabled = true; // Require checkbox

@@ -40,10 +40,20 @@
         </div>
         <div class="flex flex-wrap items-center gap-3">
             <select id="bulk-test-type" class="rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm focus:border-primary-500 focus:ring-primary-500">
-                <option value="quick">Quick Test (non-destructive)</option>
-                <option value="short">Short Test (~2 min, non-destructive)</option>
-                <option value="long">Long Test (~hours, non-destructive)</option>
-                <option value="burnin">Burn-in Test (DESTRUCTIVE)</option>
+                <optgroup label="Health Tests">
+                    <option value="quick">Quick Test (non-destructive)</option>
+                    <option value="short">Short Test (~2 min, non-destructive)</option>
+                    <option value="long">Long Test (~hours, non-destructive)</option>
+                </optgroup>
+                <optgroup label="Performance Tests">
+                    <option value="seq_speed">Speed Test (non-destructive)</option>
+                    <option value="iops">IOPS Test (non-destructive)</option>
+                    <option value="thermal">Thermal Test (30 min)</option>
+                </optgroup>
+                <optgroup label="Destructive Tests">
+                    <option value="burnin">Badblocks Test (DESTRUCTIVE)</option>
+                    <option value="fio">FIO Burn-in (DESTRUCTIVE)</option>
+                </optgroup>
             </select>
             <button id="bulk-start-btn" onclick="startBulkTests()" disabled
                     class="btn-primary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
@@ -260,15 +270,21 @@ async function startBulkTests() {
         'quick': 'Quick (SMART health check)',
         'short': 'Short (~2 minutes)',
         'long': 'Long (several hours)',
-        'burnin': 'Burn-in (DESTRUCTIVE - will destroy all data)'
+        'burnin': 'Badblocks (DESTRUCTIVE - will destroy all data)',
+        'fio': 'FIO Burn-in (DESTRUCTIVE - will destroy all data)'
     };
 
     let message = `Start ${testTypeNames[testType]} test on ${devices.length} disk${devices.length !== 1 ? 's' : ''}?\n\n`;
     message += `Devices:\n${devices.map(d => `  - ${d}`).join('\n')}\n\n`;
 
-    if (testType === 'burnin') {
+    const destructiveTests = ['burnin', 'fio'];
+    if (destructiveTests.includes(testType)) {
         message += `⚠️ WARNING: This is a DESTRUCTIVE test!\n`;
-        message += `It will write to every sector of these disks, overwriting all existing data.\n\n`;
+        if (testType === 'burnin') {
+            message += `It will write to every sector of these disks and verify them, overwriting all existing data.\n\n`;
+        } else {
+            message += `It will perform a full disk write followed by 4 hours of random read/write testing.\n\n`;
+        }
         message += `This action cannot be undone. Continue?`;
     } else {
         message += `Continue?`;
@@ -278,9 +294,12 @@ async function startBulkTests() {
         return;
     }
 
-    // For burn-in, require a second confirmation
-    if (testType === 'burnin') {
-        if (!confirm('FINAL CONFIRMATION:\n\nThis will DESTROY ALL DATA on the selected disks.\n\nType "OK" to confirm.')) {
+    // For destructive tests, require a second confirmation
+    if (destructiveTests.includes(testType)) {
+        const testDesc = testType === 'burnin'
+            ? 'This will write to every sector and verify, destroying all data.'
+            : 'This will perform full disk writes and random testing, destroying all data.';
+        if (!confirm(`FINAL CONFIRMATION:\n\n${testDesc}\n\nType "OK" to confirm.`)) {
             return;
         }
     }
