@@ -207,7 +207,7 @@
     let availableDisks = [];
 
     // Open new test modal and load available disks
-    async function openNewTestModal() {
+    async function openNewTestModal(preselectedDevice = null) {
         document.getElementById('new-test-modal').classList.remove('hidden');
 
         const diskSelect = document.getElementById('disk-select');
@@ -227,6 +227,13 @@
                     option.textContent = disk.display_name || `${disk.name} (${disk.size})`;
                     diskSelect.appendChild(option);
                 });
+
+                // Pre-select device if specified
+                if (preselectedDevice) {
+                    diskSelect.value = preselectedDevice;
+                    // Trigger change event to show disk details
+                    diskSelect.dispatchEvent(new Event('change'));
+                }
             } else {
                 diskSelect.innerHTML = '<option value="">No available disks found</option>';
             }
@@ -273,6 +280,15 @@
             confirmCheckbox.addEventListener('change', function() {
                 startBtn.disabled = !this.checked;
             });
+        }
+
+        // Check for pre-selected device from sessionStorage (from Attached page)
+        const preselectedDevice = sessionStorage.getItem('selectedDevice');
+        if (preselectedDevice) {
+            // Clear it immediately so it doesn't persist
+            sessionStorage.removeItem('selectedDevice');
+            // Open modal with pre-selected device (small delay to ensure DOM is ready)
+            setTimeout(() => openNewTestModal(preselectedDevice), 100);
         }
     });
 
