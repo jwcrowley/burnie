@@ -236,7 +236,9 @@
 
         // Reliability Trend Chart
         const reliabilityCtx = document.getElementById('reliabilityTrendChart').getContext('2d');
-        if (window.reliabilityTrendChart) window.reliabilityTrendChart.destroy();
+        if (window.reliabilityTrendChart && typeof window.reliabilityTrendChart.destroy === 'function') {
+            window.reliabilityTrendChart.destroy();
+        }
 
         if (timeline.length === 0) {
             showNoData('reliabilityTrendChart', 'No reliability trend data yet - complete more burn-in tests');
@@ -267,7 +269,7 @@
 
         // Test Volume Chart
         const volumeCtx = document.getElementById('testVolumeChart').getContext('2d');
-        if (window.testVolumeChart) window.testVolumeChart.destroy();
+        if (window.testVolumeChart && typeof window.testVolumeChart.destroy === 'function') window.testVolumeChart.destroy();
 
         if (timeline.length === 0) {
             showNoData('testVolumeChart', 'No test data yet - start running tests');
@@ -296,7 +298,7 @@
         // Vendor Comparison
         const vendorData = await fetch(`/api/stats/vendor`).then(r => r.json());
         const vendorCtx = document.getElementById('vendorComparisonChart').getContext('2d');
-        if (window.vendorChart) window.vendorChart.destroy();
+        if (window.vendorChart && typeof window.vendorChart.destroy === 'function') window.vendorChart.destroy();
 
         if (vendorData.length === 0) {
             showNoData('vendorComparisonChart', 'No vendor data yet - complete burn-in tests first');
@@ -330,7 +332,7 @@
         // Model Comparison
         const modelData = await fetch(`/api/stats/model`).then(r => r.json());
         const modelCtx = document.getElementById('modelComparisonChart').getContext('2d');
-        if (window.modelChart) window.modelChart.destroy();
+        if (window.modelChart && typeof window.modelChart.destroy === 'function') window.modelChart.destroy();
 
         if (modelData.length === 0) {
             showNoData('modelComparisonChart', 'No model data yet - complete burn-in tests first');
@@ -364,7 +366,7 @@
         // Score Distribution
         const scoreDist = overview.score_distribution || {};
         const scoreCtx = document.getElementById('scoreDistributionChart').getContext('2d');
-        if (window.scoreDistChart) window.scoreDistChart.destroy();
+        if (window.scoreDistChart && typeof window.scoreDistChart.destroy === 'function') window.scoreDistChart.destroy();
 
         const scoreValues = [
             scoreDist['90-100'] || 0,
@@ -400,7 +402,7 @@
         // Batch Performance
         const batchData = await fetch(`/api/stats/batch`).then(r => r.json());
         const batchCtx = document.getElementById('batchPerformanceChart').getContext('2d');
-        if (window.batchChart) window.batchChart.destroy();
+        if (window.batchChart && typeof window.batchChart.destroy === 'function') window.batchChart.destroy();
 
         if (batchData.length === 0) {
             showNoData('batchPerformanceChart', 'No batch data yet - add batch information to disks');
@@ -438,7 +440,7 @@
         // Interface Performance Chart
         const interfaceData = await fetch(`/api/stats/interface`).then(r => r.json());
         const interfaceCtx = document.getElementById('interfaceChart').getContext('2d');
-        if (window.interfaceChart) window.interfaceChart.destroy();
+        if (window.interfaceChart && typeof window.interfaceChart.destroy === 'function') window.interfaceChart.destroy();
 
         if (interfaceData.length === 0) {
             showNoData('interfaceChart', 'No interface data yet - complete burn-in tests first');
@@ -466,21 +468,35 @@
 
         // Temperature Distribution Chart
         const tempDistCtx = document.getElementById('tempDistributionChart').getContext('2d');
-        if (window.tempDistChart) window.tempDistChart.destroy();
+        if (window.tempDistChart && typeof window.tempDistChart.destroy === 'function') window.tempDistChart.destroy();
         showNoData('tempDistributionChart', 'Temperature distribution coming soon');
     }
+}
 
-    // Initial load
-    loadCharts();
-
-    // Update theme when changed
-    document.getElementById('theme-toggle').addEventListener('click', function() {
-        setTimeout(() => {
-            const isDark = document.documentElement.classList.contains('dark');
-            Chart.defaults.color = isDark ? '#9ca3af' : '#6b7280';
-            Chart.defaults.borderColor = isDark ? '#374151' : '#e5e7eb';
-            Object.values(window).filter(obj => obj instanceof Chart).forEach(c => c.update());
-        }, 10);
+// Wait for DOM to be ready before running
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        loadCharts();
+        setupThemeToggle();
     });
+} else {
+    loadCharts();
+    setupThemeToggle();
+}
+
+// Setup theme toggle listener
+function setupThemeToggle() {
+    const themeToggle = document.getElementById('theme-toggle');
+    if (themeToggle) {
+        themeToggle.addEventListener('click', function() {
+            setTimeout(() => {
+                const isDark = document.documentElement.classList.contains('dark');
+                Chart.defaults.color = isDark ? '#9ca3af' : '#6b7280';
+                Chart.defaults.borderColor = isDark ? '#374151' : '#e5e7eb';
+                Object.values(window).filter(obj => obj instanceof Chart).forEach(c => c.update());
+            }, 10);
+        });
+    }
+}
 </script>
 {% endblock %}

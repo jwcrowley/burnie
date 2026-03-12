@@ -142,17 +142,45 @@
 <script>
     let currentFilter = '';
 
-    // Filter button handling
-    document.querySelectorAll('.filter-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-            this.classList.add('active');
-            currentFilter = this.dataset.type;
+    // Wait for DOM to be ready
+    function initAlerts() {
+        // Filter button handling
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                currentFilter = this.dataset.type;
 
-            // Update alerts container
-            htmx.ajax('GET', `/partials/alerts/table?limit=100&alert_type=${currentFilter}`, '#alerts-container');
+                // Update alerts container
+                htmx.ajax('GET', `/partials/alerts/table?limit=100&alert_type=${currentFilter}`, '#alerts-container');
+            });
         });
-    });
+
+        // Update alert counts
+        updateAlertCounts();
+
+        // Setup theme toggle
+        const themeToggle = document.getElementById('theme-toggle');
+        if (themeToggle) {
+            themeToggle.addEventListener('click', function() {
+                setTimeout(() => {
+                    const isDark = document.documentElement.classList.contains('dark');
+                    Chart.defaults.color = isDark ? '#9ca3af' : '#6b7280';
+                    Chart.defaults.borderColor = isDark ? '#374151' : '#e5e7eb';
+                    Object.values(window).filter(obj => obj instanceof Chart).forEach(c => c.update());
+                }, 10);
+            });
+        }
+
+        // Refresh counts periodically
+        setInterval(updateAlertCounts, {{ refresh_interval }} * 1000);
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initAlerts);
+    } else {
+        initAlerts();
+    }
 
     // Update alert counts
     function updateAlertCounts() {
@@ -181,7 +209,7 @@
         });
 
         const typeCtx = document.getElementById('alertTypeChart').getContext('2d');
-        if (window.alertTypeChart) window.alertTypeChart.destroy();
+        if (window.alertTypeChart && typeof window.alertTypeChart.destroy === 'function') window.alertTypeChart.destroy();
         window.alertTypeChart = new Chart(typeCtx, {
             type: 'doughnut',
             data: {
@@ -207,7 +235,7 @@
 
         // Alert Trend (mock data for now - would need historical data)
         const trendCtx = document.getElementById('alertTrendChart').getContext('2d');
-        if (window.alertTrendChart) window.alertTrendChart.destroy();
+        if (window.alertTrendChart && typeof window.alertTrendChart.destroy === 'function') window.alertTrendChart.destroy();
         window.alertTrendChart = new Chart(trendCtx, {
             type: 'line',
             data: {
@@ -238,21 +266,5 @@
             }
         });
     }
-
-    // Initial load
-    updateAlertCounts();
-
-    // Refresh counts periodically
-    setInterval(updateAlertCounts, {{ refresh_interval }} * 1000);
-
-    // Update theme when changed
-    document.getElementById('theme-toggle').addEventListener('click', function() {
-        setTimeout(() => {
-            const isDark = document.documentElement.classList.contains('dark');
-            Chart.defaults.color = isDark ? '#9ca3af' : '#6b7280';
-            Chart.defaults.borderColor = isDark ? '#374151' : '#e5e7eb';
-            Object.values(window).filter(obj => obj instanceof Chart).forEach(c => c.update());
-        }, 10);
-    });
 </script>
 {% endblock %}
