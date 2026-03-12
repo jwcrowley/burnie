@@ -4,18 +4,58 @@
 
 {% block nav_attached %}active{% endblock %}
 
+{% block head %}
+<style>
+    .disk-card {
+        transition: all 0.2s;
+    }
+    .disk-card.selected {
+        ring: 2px;
+        ring-color: rgb(14 165 233);
+        border-color: rgb(14 165 233);
+    }
+    .disk-checkbox {
+        width: 1.25rem;
+        height: 1.25rem;
+        cursor: pointer;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="mb-6">
     <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Attached Disks</h1>
     <p class="text-gray-600 dark:text-gray-400">Physical disks available for testing (unmounted)</p>
 </div>
 
-<!-- Refresh button -->
-<div class="mb-4 flex justify-end">
-    <button onclick="refreshDisks()" class="btn-secondary flex items-center gap-2">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
-        Refresh
-    </button>
+<!-- Bulk Actions Bar -->
+<div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-6 border border-gray-200 dark:border-gray-700">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div class="flex items-center gap-4">
+            <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" id="select-all-checkbox" class="disk-checkbox" onchange="toggleSelectAll()">
+                <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Select All</span>
+            </label>
+            <span id="selected-count" class="text-sm text-gray-500 dark:text-gray-400">0 disks selected</span>
+        </div>
+        <div class="flex flex-wrap items-center gap-3">
+            <select id="bulk-test-type" class="rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm focus:border-primary-500 focus:ring-primary-500">
+                <option value="quick">Quick Test (non-destructive)</option>
+                <option value="short">Short Test (~2 min, non-destructive)</option>
+                <option value="long">Long Test (~hours, non-destructive)</option>
+                <option value="burnin">Burn-in Test (DESTRUCTIVE)</option>
+            </select>
+            <button id="bulk-start-btn" onclick="startBulkTests()" disabled
+                    class="btn-primary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                Start Tests (<span id="bulk-count">0</span>)
+            </button>
+            <button onclick="refreshDisks()" class="btn-secondary flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                Refresh
+            </button>
+        </div>
+    </div>
 </div>
 
 <!-- Disks Grid -->
@@ -31,6 +71,7 @@
 {% block scripts %}
 <script>
 let availableDisks = [];
+let selectedDisks = new Set();
 
 async function loadDisks() {
     try {
@@ -65,11 +106,20 @@ function renderDisks() {
     }
 
     container.innerHTML = availableDisks.map(disk => `
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-5 border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow">
+        <div class="disk-card bg-white dark:bg-gray-800 rounded-lg shadow p-5 border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow ${selectedDisks.has(disk.device) ? 'selected' : ''}"
+             id="card-${disk.device.replace(/[^a-zA-Z0-9]/g, '_')}">
             <div class="flex justify-between items-start mb-4">
-                <div class="flex-1">
-                    <h3 class="font-mono text-lg font-semibold text-gray-900 dark:text-white">${disk.device}</h3>
-                    <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">${disk.display_name || disk.name || 'Unknown'}</p>
+                <div class="flex items-start gap-3 flex-1">
+                    <input type="checkbox"
+                           class="disk-checkbox mt-1"
+                           id="checkbox-${disk.device.replace(/[^a-zA-Z0-9]/g, '_')}"
+                           value="${disk.device}"
+                           onchange="toggleDiskSelection('${disk.device}')"
+                           ${selectedDisks.has(disk.device) ? 'checked' : ''}>
+                    <div class="flex-1">
+                        <h3 class="font-mono text-lg font-semibold text-gray-900 dark:text-white">${disk.device}</h3>
+                        <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">${disk.display_name || disk.name || 'Unknown'}</p>
+                    </div>
                 </div>
                 <button onclick="blinkDisk('${disk.device}', '${disk.display_name || disk.name}')"
                         class="btn-secondary text-xs py-1 px-3 flex items-center gap-1"
@@ -125,14 +175,167 @@ function renderDisks() {
                 ` : ''}
             </div>
 
-            <div class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 flex gap-2">
-                <a href="/tests" onclick="startTestFromDevice('${disk.device}')"
-                   class="flex-1 btn-primary text-center text-sm py-2">
-                    Start Test
-                </a>
+            <div class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <button onclick="startSingleTest('${disk.device}')"
+                        class="w-full btn-secondary text-sm py-2">
+                    Start Individual Test
+                </button>
             </div>
         </div>
     `).join('');
+}
+
+function toggleDiskSelection(device) {
+    const safeDevice = device.replace(/[^a-zA-Z0-9]/g, '_');
+    const checkbox = document.getElementById(`checkbox-${safeDevice}`);
+    const card = document.getElementById(`card-${safeDevice}`);
+
+    if (checkbox.checked) {
+        selectedDisks.add(device);
+        card.classList.add('selected');
+    } else {
+        selectedDisks.delete(device);
+        card.classList.remove('selected');
+    }
+
+    updateSelectionUI();
+}
+
+function toggleSelectAll() {
+    const selectAllCheckbox = document.getElementById('select-all-checkbox');
+
+    if (selectAllCheckbox.checked) {
+        // Select all
+        availableDisks.forEach(disk => {
+            selectedDisks.add(disk.device);
+            const safeDevice = disk.device.replace(/[^a-zA-Z0-9]/g, '_');
+            const checkbox = document.getElementById(`checkbox-${safeDevice}`);
+            const card = document.getElementById(`card-${safeDevice}`);
+            if (checkbox) checkbox.checked = true;
+            if (card) card.classList.add('selected');
+        });
+    } else {
+        // Deselect all
+        selectedDisks.clear();
+        availableDisks.forEach(disk => {
+            const safeDevice = disk.device.replace(/[^a-zA-Z0-9]/g, '_');
+            const checkbox = document.getElementById(`checkbox-${safeDevice}`);
+            const card = document.getElementById(`card-${safeDevice}`);
+            if (checkbox) checkbox.checked = false;
+            if (card) card.classList.remove('selected');
+        });
+    }
+
+    updateSelectionUI();
+}
+
+function updateSelectionUI() {
+    const count = selectedDisks.size;
+    document.getElementById('selected-count').textContent = `${count} disk${count !== 1 ? 's' : ''} selected`;
+    document.getElementById('bulk-count').textContent = count;
+    document.getElementById('bulk-start-btn').disabled = count === 0;
+
+    // Update select all checkbox state
+    const selectAllCheckbox = document.getElementById('select-all-checkbox');
+    if (availableDisks.length > 0) {
+        selectAllCheckbox.checked = count === availableDisks.length;
+        selectAllCheckbox.indeterminate = count > 0 && count < availableDisks.length;
+    } else {
+        selectAllCheckbox.checked = false;
+        selectAllCheckbox.indeterminate = false;
+    }
+}
+
+async function startBulkTests() {
+    if (selectedDisks.size === 0) {
+        alert('Please select at least one disk');
+        return;
+    }
+
+    const testType = document.getElementById('bulk-test-type').value;
+    const devices = Array.from(selectedDisks);
+
+    // Build confirmation message
+    const testTypeNames = {
+        'quick': 'Quick (SMART health check)',
+        'short': 'Short (~2 minutes)',
+        'long': 'Long (several hours)',
+        'burnin': 'Burn-in (DESTRUCTIVE - will destroy all data)'
+    };
+
+    let message = `Start ${testTypeNames[testType]} test on ${devices.length} disk${devices.length !== 1 ? 's' : ''}?\n\n`;
+    message += `Devices:\n${devices.map(d => `  - ${d}`).join('\n')}\n\n`;
+
+    if (testType === 'burnin') {
+        message += `⚠️ WARNING: This is a DESTRUCTIVE test!\n`;
+        message += `It will write to every sector of these disks, overwriting all existing data.\n\n`;
+        message += `This action cannot be undone. Continue?`;
+    } else {
+        message += `Continue?`;
+    }
+
+    if (!confirm(message)) {
+        return;
+    }
+
+    // For burn-in, require a second confirmation
+    if (testType === 'burnin') {
+        if (!confirm('FINAL CONFIRMATION:\n\nThis will DESTROY ALL DATA on the selected disks.\n\nType "OK" to confirm.')) {
+            return;
+        }
+    }
+
+    // Start tests
+    let successCount = 0;
+    let failCount = 0;
+    const errors = [];
+
+    for (const device of devices) {
+        try {
+            const response = await fetch('/api/tests/start', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    device: device,
+                    test_type: testType
+                })
+            });
+
+            if (response.ok) {
+                successCount++;
+            } else {
+                failCount++;
+                const error = await response.json();
+                errors.push(`${device}: ${error.detail || 'Unknown error'}`);
+            }
+        } catch (error) {
+            failCount++;
+            errors.push(`${device}: ${error.message}`);
+        }
+    }
+
+    // Show results
+    let resultMsg = `Test start complete!\n\n`;
+    resultMsg += `✓ Successfully started: ${successCount}\n`;
+    if (failCount > 0) {
+        resultMsg += `✗ Failed: ${failCount}\n\n`;
+        resultMsg += `Errors:\n${errors.join('\n')}`;
+    }
+    resultMsg += `\n\nMonitor progress on the Tests page.`;
+
+    alert(resultMsg);
+
+    // Navigate to tests page if any were successful
+    if (successCount > 0) {
+        window.location.href = '/tests';
+    }
+}
+
+function startSingleTest(device) {
+    sessionStorage.setItem('selectedDevice', device);
+    window.location.href = '/tests';
 }
 
 async function blinkDisk(device, diskInfo) {
@@ -160,12 +363,8 @@ async function blinkDisk(device, diskInfo) {
     }
 }
 
-function startTestFromDevice(device) {
-    // Store the device in sessionStorage so the tests page can pre-select it
-    sessionStorage.setItem('selectedDevice', device);
-}
-
 function refreshDisks() {
+    // Preserve selection when refreshing
     loadDisks();
 }
 
