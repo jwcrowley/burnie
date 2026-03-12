@@ -956,6 +956,14 @@ def get_running_tests():
     return result
 
 
+@app.post("/tests/cleanup")
+async def trigger_cleanup():
+    """Manually trigger cleanup of stale running tests."""
+    import asyncio
+    await cleanup_stale_tests()
+    return {"status": "cleanup_completed", "message": "Cleaned up stale running tests"}
+
+
 @app.get("/tests/history")
 def get_test_history(
     serial: Optional[str] = None,
