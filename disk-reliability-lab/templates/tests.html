@@ -292,10 +292,17 @@
             });
         }
 
-        // Check for pre-selected device from sessionStorage (from Attached page)
-        const preselectedDevice = sessionStorage.getItem('selectedDevice');
+        // Check for pre-selected device from sessionStorage (from Attached page) or URL (from Disk detail)
+        let preselectedDevice = sessionStorage.getItem('selectedDevice');
+
+        // Also check URL parameter
+        if (!preselectedDevice) {
+            const urlParams = new URLSearchParams(window.location.search);
+            preselectedDevice = urlParams.get('device');
+        }
+
         if (preselectedDevice) {
-            // Clear it immediately so it doesn't persist
+            // Clear sessionStorage immediately so it doesn't persist
             sessionStorage.removeItem('selectedDevice');
             // Open modal with pre-selected device (small delay to ensure DOM is ready)
             setTimeout(() => openNewTestModal(preselectedDevice), 100);

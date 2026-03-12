@@ -293,29 +293,144 @@
 
 {% block scripts %}
 <script>
-    // Device path for SMART queries
+    // Device path for SMART queries (global, used by multiple functions)
     const devicePath = {% if disk.device_path %}'{{ disk.device_path }}'{% else %}null{% endif %};
 
-    // Tab switching
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            // Update buttons
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
+    // Global SMART errors loaded flag
+    let smartErrorsLoaded = false;
 
-            // Update content
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
-            document.getElementById(btn.dataset.tab).classList.remove('hidden');
+    // Wait for DOM to be ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initDiskDetail);
+    } else {
+        initDiskDetail();
+    }
 
-            // Load SMART errors when that tab is clicked
-            if (btn.dataset.tab === 'smart-errors') {
-                loadSmartErrors();
-            }
+    function initDiskDetail() {
+        // Tab switching
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                // Update buttons
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+
+                // Update content
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+                const targetContent = document.getElementById(btn.dataset.tab);
+                if (targetContent) {
+                    targetContent.classList.remove('hidden');
+                }
+
+                // Load SMART errors when that tab is clicked
+                if (btn.dataset.tab === 'smart-errors') {
+                    loadSmartErrors();
+                }
+            });
         });
-    });
+
+        // Check if Chart is available
+        if (typeof Chart === 'undefined') {
+            console.error('Chart.js not loaded');
+            return;
+        }
+
+        // Temperature Chart
+        const tempData = {{ disk.temperature_history|tojson }};
+        const tempCtx = document.getElementById('temperatureChart');
+
+        if (tempCtx && tempData && tempData.length > 0) {
+            new Chart(tempCtx.getContext('2d'), {
+                type: 'line',
+                data: {
+                    labels: tempData.slice(-100).map(d => d.timestamp ? new Date(d.timestamp).toLocaleTimeString() : ''),
+                    datasets: [{
+                        label: 'Temperature (°C)',
+                        data: tempData.slice(-100).map(d => d.temperature),
+                        borderColor: '#0ea5e9',
+                        backgroundColor: 'rgba(14, 165, 233, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            title: {
+                                display: true,
+                                text: 'Temperature (°C)'
+                            }
+                        }
+                    }
+                }
+            });
+        } else {
+            // Show "no data" message for temperature chart
+            const tempContainer = document.getElementById('temperatureChart')?.parentElement;
+            if (tempContainer) {
+                tempContainer.innerHTML = '<p class="text-gray-500 dark:text-gray-400 text-center py-8">No temperature data available</p>';
+            }
+        }
+
+        // SMART Attributes Chart (last value of each attribute)
+        const smartData = {{ disk.smart_history|tojson }};
+        const smartCtx = document.getElementById('smartChart');
+
+        if (smartCtx && smartData && smartData.length > 0) {
+            // Group by attribute and get latest values
+            const attributeValues = {};
+            smartData.forEach(s => {
+                if (!attributeValues[s.attribute] || new Date(s.timestamp) > new Date(attributeValues[s.attribute].timestamp)) {
+                    attributeValues[s.attribute] = s;
+                }
+            });
+
+            const attributes = Object.keys(attributeValues).slice(0, 10);
+            const values = attributes.map(a => attributeValues[a].value);
+
+            if (attributes.length > 0) {
+                new Chart(smartCtx.getContext('2d'), {
+                    type: 'bar',
+                    data: {
+                        labels: attributes,
+                        datasets: [{
+                            label: 'Current Value',
+                            data: values,
+                            backgroundColor: attributes.map((a, i) => {
+                                const val = values[i];
+                                if (val < 10) return '#ef4444';
+                                if (val < 50) return '#f59e0b';
+                                return '#10b981';
+                            })
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        indexAxis: 'y',
+                        scales: {
+                            x: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+            } else {
+                const smartContainer = smartCtx.parentElement;
+                smartContainer.innerHTML = '<p class="text-gray-500 dark:text-gray-400 text-center py-8">No SMART attribute data available</p>';
+            }
+        } else {
+            // Show "no data" message for SMART attributes chart
+            const smartContainer = document.getElementById('smartChart')?.parentElement;
+            if (smartContainer) {
+                smartContainer.innerHTML = '<p class="text-gray-500 dark:text-gray-400 text-center py-8">No SMART attribute data available</p>';
+            }
+        }
+    }
 
     // Load SMART error analysis
-    let smartErrorsLoaded = false;
     async function loadSmartErrors() {
         if (smartErrorsLoaded) return;
 
@@ -399,83 +514,7 @@
         }
     }
 
-    // Temperature Chart
-    const tempData = {{ disk.temperature_history|tojson }};
-    const tempCtx = document.getElementById('temperatureChart').getContext('2d');
-
-    new Chart(tempCtx, {
-        type: 'line',
-        data: {
-            labels: tempData.slice(-100).map(d => d.timestamp ? new Date(d.timestamp).toLocaleTimeString() : ''),
-            datasets: [{
-                label: 'Temperature (°C)',
-                data: tempData.slice(-100).map(d => d.temperature),
-                borderColor: '#0ea5e9',
-                backgroundColor: 'rgba(14, 165, 233, 0.1)',
-                fill: true,
-                tension: 0.4
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                y: {
-                    beginAtZero: false,
-                    title: {
-                        display: true,
-                        text: 'Temperature (°C)'
-                    }
-                }
-            }
-        }
-    });
-
-    // SMART Attributes Chart (last value of each attribute)
-    const smartData = {{ disk.smart_history|tojson }};
-    const smartCtx = document.getElementById('smartChart').getContext('2d');
-
-    // Group by attribute and get latest values
-    const attributeValues = {};
-    smartData.forEach(s => {
-        if (!attributeValues[s.attribute] || new Date(s.timestamp) > new Date(attributeValues[s.attribute].timestamp)) {
-            attributeValues[s.attribute] = s;
-        }
-    });
-
-    const attributes = Object.keys(attributeValues).slice(0, 10);
-    const values = attributes.map(a => attributeValues[a].value);
-
-    new Chart(smartCtx, {
-        type: 'bar',
-        data: {
-            labels: attributes,
-            datasets: [{
-                label: 'Current Value',
-                data: values,
-                backgroundColor: attributes.map((a, i) => {
-                    const val = values[i];
-                    if (val < 10) return '#ef4444';
-                    if (val < 50) return '#f59e0b';
-                    return '#10b981';
-                })
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            indexAxis: 'y',
-            scales: {
-                x: {
-                    beginAtZero: true
-                }
-            }
-        }
-    });
-
-    // Secure Erase functions
-    const devicePath = {% if disk.device_path %}'{{ disk.device_path }}'{% else %}null{% endif %};
-
+    // Secure Erase functions (global, called from onclick)
     function showSecureEraseModal() {
         if (!devicePath) {
             alert('No device path available. Run a test on this disk first.');

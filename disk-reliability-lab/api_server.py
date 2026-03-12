@@ -64,6 +64,36 @@ async def cleanup_stale_tests():
                 except OSError:
                     is_stale = True
                     reason = "Process died (system restart?)"
+            else:
+                # No PID recorded - check if expected process is running
+                if test_type == 'burnin':
+                    # Check for badblocks process on this device
+                    try:
+                        result = subprocess.run(
+                            ['pgrep', '-f', f'badblocks.*{device}'],
+                            capture_output=True,
+                            text=True,
+                            timeout=5
+                        )
+                        if result.returncode != 0:
+                            is_stale = True
+                            reason = "No badblocks process found"
+                    except:
+                        pass
+                elif test_type in ['fio', 'seq_speed', 'iops', 'thermal']:
+                    # Check for fio process
+                    try:
+                        result = subprocess.run(
+                            ['pgrep', '-f', f'fio.*{device}'],
+                            capture_output=True,
+                            text=True,
+                            timeout=5
+                        )
+                        if result.returncode != 0:
+                            is_stale = True
+                            reason = "No fio process found"
+                    except:
+                        pass
 
             # Check if device still exists
             device_exists = os.path.exists(device) if device else False
@@ -798,7 +828,7 @@ def get_running_tests():
                d.model as db_model, d.vendor as db_vendor, d.size_bytes as db_size_bytes
         FROM tests t
         LEFT JOIN disks d ON d.serial = t.serial
-        WHERE t.finished IS NULL
+        WHERE t.result = 'running'
         ORDER BY t.started ASC
     """
     rows = conn.execute(query,()).fetchall()
@@ -1312,6 +1342,58 @@ def update_test_result(test_id: int, result: str, serial: str):
         conn.close()
 
 
+def collect_smart_data(device: str, serial: str):
+    """Collect and store SMART attributes and temperature for a disk."""
+    try:
+        # Get full SMART data in JSON format
+        result = subprocess.run(
+            ['smartctl', '-A', '-j', device],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+
+        if result.returncode != 0:
+            logger.warning(f"Failed to collect SMART data for {device}: {result.stderr}")
+            return
+
+        import json
+        smart_data = json.loads(result.stdout)
+
+        conn = get_db()
+        timestamp = datetime.now().isoformat()
+
+        # Store temperature if available
+        if 'ata_smart_attributes' in smart_data:
+            for attr in smart_data['ata_smart_attributes']:
+                if attr.get('name') == 'Temperature_Celsius':
+                    temp = attr.get('value')
+                    if temp:
+                        conn.execute(
+                            "INSERT INTO temperature_history (serial, temperature, timestamp) VALUES (?, ?, ?)",
+                            (serial, temp, timestamp)
+                        )
+                        break
+
+        # Store all SMART attributes
+        if 'ata_smart_attributes' in smart_data:
+            for attr in smart_data['ata_smart_attributes']:
+                attr_name = attr.get('name')
+                attr_value = attr.get('value')
+                if attr_name and attr_value is not None:
+                    conn.execute(
+                        "INSERT INTO smart_history (serial, attribute, value, timestamp) VALUES (?, ?, ?, ?)",
+                        (serial, attr_name, attr_value, timestamp)
+                    )
+
+        conn.commit()
+        conn.close()
+        logger.info(f"Collected SMART data for {serial}")
+
+    except Exception as e:
+        logger.error(f"Error collecting SMART data: {e}")
+
+
 def run_quick_test(device: str, test_id: int, serial: str):
     """Run a quick SMART health check (non-destructive)."""
     try:
@@ -1327,6 +1409,8 @@ def run_quick_test(device: str, test_id: int, serial: str):
         # Check if SMART test passed
         if 'PASSED' in result.stdout or 'test passed' in result.stdout.lower():
             update_test_result(test_id, 'passed', serial)
+            # Collect SMART data after successful test
+            collect_smart_data(device, serial)
         else:
             update_test_result(test_id, 'failed', serial)
 
@@ -1395,6 +1479,8 @@ def run_short_test(device: str, test_id: int, serial: str):
                 # Check if drive passed SMART test
                 if 'PASSED' in health_result.stdout or 'test passed' in health_result.stdout.lower():
                     update_test_result(test_id, 'passed', serial)
+                    # Collect SMART data after successful test
+                    collect_smart_data(device, serial)
                 else:
                     logger.error(f"SMART health check failed: {health_result.stdout}")
                     update_test_result(test_id, 'failed', serial)
@@ -1480,6 +1566,8 @@ def run_long_test(device: str, test_id: int, serial: str):
                 # Check if drive passed SMART test
                 if 'PASSED' in health_result.stdout or 'test passed' in health_result.stdout.lower():
                     update_test_result(test_id, 'passed', serial)
+                    # Collect SMART data after successful test
+                    collect_smart_data(device, serial)
                 else:
                     logger.error(f"SMART health check failed: {health_result.stdout}")
                     update_test_result(test_id, 'failed', serial)
@@ -1510,31 +1598,50 @@ def run_long_test(device: str, test_id: int, serial: str):
 
 def run_burnin_test(device: str, test_id: int, serial: str):
     """Run a destructive burn-in test using badblocks."""
+    process = None
     try:
         logger.info(f"Starting burn-in test for {device} (test_id={test_id})")
 
-        # Run badblocks in destructive write mode
+        # Run badblocks in destructive write mode using Popen for PID tracking
         # This will write to every sector and read it back
-        result = subprocess.run(
+        process = subprocess.Popen(
             ['badblocks', '-w', '-s', device],
-            capture_output=True,
-            text=True,
-            timeout=86400  # 24 hours max
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
         )
 
-        if result.returncode == 0:
-            # No bad blocks found
-            update_test_result(test_id, 'passed', serial)
-        else:
-            # Bad blocks found or error
+        # Store PID in database
+        conn = get_db()
+        conn.execute("UPDATE tests SET pid = ? WHERE id = ?", (process.pid, test_id))
+        conn.commit()
+        conn.close()
+        logger.info(f"Started badblocks process {process.pid} for {device}")
+
+        # Wait for completion with timeout
+        try:
+            stdout, stderr = process.communicate(timeout=86400)  # 24 hours max
+
+            if process.returncode == 0:
+                # No bad blocks found
+                update_test_result(test_id, 'passed', serial)
+            else:
+                # Bad blocks found or error
+                logger.error(f"Badblocks failed with code {process.returncode}: {stderr.decode()}")
+                update_test_result(test_id, 'failed', serial)
+
+        except subprocess.TimeoutExpired:
+            logger.error(f"Burn-in test timed out for {device}")
+            process.kill()
             update_test_result(test_id, 'failed', serial)
 
-    except subprocess.TimeoutExpired:
-        logger.error(f"Burn-in test timed out for {device}")
-        update_test_result(test_id, 'failed', serial)
     except Exception as e:
         logger.error(f"Burn-in test failed for {device}: {e}")
         update_test_result(test_id, 'failed', serial)
+        if process:
+            try:
+                process.kill()
+            except:
+                pass
 
 
 def run_fio_test(device: str, test_id: int, serial: str):
