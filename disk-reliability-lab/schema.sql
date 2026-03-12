@@ -18,7 +18,8 @@ device TEXT,
 started TEXT,
 finished TEXT,
 result TEXT,
-test_type TEXT
+test_type TEXT,
+pid INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS smart_history (

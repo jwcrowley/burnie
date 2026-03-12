@@ -3,12 +3,118 @@ from fastapi.responses import JSONResponse
 from fastapi.responses import JSONResponse, Response
 from starlette.responses import StreamingResponse
 from typing import Optional, List
+from contextlib import asynccontextmanager
 import sqlite3
 import os
+import subprocess
+import threading
+import time
+import signal
 from datetime import datetime, timedelta
 import json
+import logging
 
-app = FastAPI(title="Disk Reliability Lab API")
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Active test runners by PID
+active_test_pids = {}
+
+
+async def cleanup_stale_tests():
+    """Mark tests as failed if their process is no longer running or they've been running too long."""
+    conn = get_db()
+    try:
+        # Get all running tests
+        running_tests = conn.execute("""
+            SELECT id, serial, device, pid, started, test_type
+            FROM tests
+            WHERE result = 'running'
+        """).fetchall()
+
+        # Max expected runtimes for each test type (in minutes)
+        max_runtimes = {
+            'quick': 5,      # 5 minutes max
+            'short': 10,     # 10 minutes max (SMART short test)
+            'long': 300,     # 5 hours max (SMART long test)
+            'burnin': 1440,  # 24 hours max (badblocks)
+        }
+
+        now = datetime.now()
+
+        for test in running_tests:
+            test_id = test['id']
+            pid = test['pid']  # Will be None if not set
+            device = test['device']
+            serial = test['serial']
+            started = test['started']
+            test_type = test['test_type'] if 'test_type' in test.keys() else 'burnin'
+
+            is_stale = False
+            reason = None
+
+            # Check if PID exists and is running
+            if pid:
+                try:
+                    os.kill(pid, 0)  # Check if process exists
+                except OSError:
+                    is_stale = True
+                    reason = "Process died (system restart?)"
+
+            # Check if device still exists
+            device_exists = os.path.exists(device) if device else False
+            if not device_exists:
+                is_stale = True
+                reason = "Device not found"
+
+            # Check if test has been running too long (for thread-based tests without PID)
+            if not is_stale and started:
+                try:
+                    started_dt = datetime.fromisoformat(started)
+                    elapsed_minutes = (now - started_dt).total_seconds() / 60
+                    max_time = max_runtimes.get(test_type, 60)
+
+                    if elapsed_minutes > max_time:
+                        is_stale = True
+                        reason = f"Test exceeded max runtime ({max_time} minutes for {test_type})"
+                except:
+                    pass
+
+            if is_stale:
+                logger.info(f"Cleaning up stale test {test_id} for {serial}: {reason}")
+
+                conn.execute("""
+                    UPDATE tests
+                    SET result = 'failed',
+                        finished = datetime('now')
+                    WHERE id = ?
+                """, (test_id,))
+
+                # Update disk status
+                conn.execute("""
+                    UPDATE disks
+                    SET status = 'failed'
+                    WHERE serial = ?
+                """, (serial,))
+
+        conn.commit()
+        logger.info(f"Checked {len(running_tests)} running tests, cleanup complete")
+    finally:
+        conn.close()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Handle startup and shutdown events."""
+    # Startup
+    logger.info("Starting up API server...")
+    await cleanup_stale_tests()
+    yield
+    # Shutdown
+    logger.info("Shutting down API server...")
+
+
+app = FastAPI(title="Disk Reliability Lab API", lifespan=lifespan)
 
 DB_PATH = os.getenv("DB", "./disks.db")
 
@@ -17,6 +123,21 @@ def get_db():
     """Get database connection with row factory for dict access."""
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+
+    # Ensure pid column exists in tests table (migration)
+    cursor = conn.execute("PRAGMA table_info(tests)")
+    columns = [row[1] for row in cursor.fetchall()]
+    if 'pid' not in columns:
+        logger.info("Adding pid column to tests table...")
+        conn.execute("ALTER TABLE tests ADD COLUMN pid INTEGER")
+        conn.commit()
+
+    # Ensure test_type column exists in tests table (migration)
+    if 'test_type' not in columns:
+        logger.info("Adding test_type column to tests table...")
+        conn.execute("ALTER TABLE tests ADD COLUMN test_type TEXT DEFAULT 'burnin'")
+        conn.commit()
+
     return conn
 
 
@@ -1140,6 +1261,230 @@ def get_available_disks():
         return {"disks": [], "error": str(e)}
 
 
+# ============================================================================
+# Test Execution Functions
+# ============================================================================
+
+def update_test_result(test_id: int, result: str, serial: str):
+    """Update test result in database."""
+    conn = get_db()
+    try:
+        conn.execute("""
+            UPDATE tests
+            SET result = ?, finished = datetime('now')
+            WHERE id = ?
+        """, (result, test_id))
+
+        # Update disk status based on result
+        if result == 'passed':
+            conn.execute("""
+                UPDATE disks
+                SET status = 'passed', last_test = datetime('now')
+                WHERE serial = ?
+            """, (serial,))
+        elif result == 'failed':
+            conn.execute("""
+                UPDATE disks
+                SET status = 'failed', last_test = datetime('now')
+                WHERE serial = ?
+            """, (serial,))
+
+        conn.commit()
+        logger.info(f"Test {test_id} for {serial} completed with result: {result}")
+    except Exception as e:
+        logger.error(f"Error updating test result: {e}")
+    finally:
+        conn.close()
+
+
+def run_quick_test(device: str, test_id: int, serial: str):
+    """Run a quick SMART health check (non-destructive)."""
+    try:
+        logger.info(f"Starting quick test for {device} (test_id={test_id})")
+
+        result = subprocess.run(
+            ['smartctl', '-H', device],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+
+        # Check if SMART test passed
+        if 'PASSED' in result.stdout or 'test passed' in result.stdout.lower():
+            update_test_result(test_id, 'passed', serial)
+        else:
+            update_test_result(test_id, 'failed', serial)
+
+    except subprocess.TimeoutExpired:
+        logger.error(f"Quick test timed out for {device}")
+        update_test_result(test_id, 'failed', serial)
+    except Exception as e:
+        logger.error(f"Quick test failed for {device}: {e}")
+        update_test_result(test_id, 'failed', serial)
+
+
+def run_short_test(device: str, test_id: int, serial: str):
+    """Run a SMART short self-test (non-destructive, ~2 minutes)."""
+    try:
+        logger.info(f"Starting short test for {device} (test_id={test_id})")
+
+        # Start the short test
+        start_result = subprocess.run(
+            ['smartctl', '-t', 'short', device],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+
+        if start_result.returncode != 0:
+            update_test_result(test_id, 'failed', serial)
+            return
+
+        # Wait for test to complete (poll every 10 seconds)
+        max_wait = 300  # 5 minutes max
+        waited = 0
+        while waited < max_wait:
+            time.sleep(10)
+            waited += 10
+
+            status_result = subprocess.run(
+                ['smartctl', '-c', device],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+
+            # Check if test is complete
+            if 'Self-test routine in progress' not in status_result.stdout:
+                # Get test results
+                health_result = subprocess.run(
+                    ['smartctl', '-l', 'selftest', device],
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+
+                # Check for completed test without errors
+                if 'completed without error' in health_result.stdout.lower():
+                    update_test_result(test_id, 'passed', serial)
+                else:
+                    update_test_result(test_id, 'failed', serial)
+                return
+
+        # Timeout
+        update_test_result(test_id, 'failed', serial)
+
+    except Exception as e:
+        logger.error(f"Short test failed for {device}: {e}")
+        update_test_result(test_id, 'failed', serial)
+
+
+def run_long_test(device: str, test_id: int, serial: str):
+    """Run a SMART long self-test (non-destructive, several hours)."""
+    try:
+        logger.info(f"Starting long test for {device} (test_id={test_id})")
+
+        # Start the long test
+        start_result = subprocess.run(
+            ['smartctl', '-t', 'long', device],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+
+        if start_result.returncode != 0:
+            update_test_result(test_id, 'failed', serial)
+            return
+
+        # Wait for test to complete (poll every 60 seconds)
+        max_wait = 14400  # 4 hours max
+        waited = 0
+        while waited < max_wait:
+            time.sleep(60)
+            waited += 60
+
+            status_result = subprocess.run(
+                ['smartctl', '-c', device],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+
+            # Check if test is complete
+            if 'Self-test routine in progress' not in status_result.stdout:
+                # Get test results
+                health_result = subprocess.run(
+                    ['smartctl', '-l', 'selftest', device],
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+
+                # Check for completed test without errors
+                if 'completed without error' in health_result.stdout.lower():
+                    update_test_result(test_id, 'passed', serial)
+                else:
+                    update_test_result(test_id, 'failed', serial)
+                return
+
+        # Timeout
+        update_test_result(test_id, 'failed', serial)
+
+    except Exception as e:
+        logger.error(f"Long test failed for {device}: {e}")
+        update_test_result(test_id, 'failed', serial)
+
+
+def run_burnin_test(device: str, test_id: int, serial: str):
+    """Run a destructive burn-in test using badblocks."""
+    try:
+        logger.info(f"Starting burn-in test for {device} (test_id={test_id})")
+
+        # Run badblocks in destructive write mode
+        # This will write to every sector and read it back
+        result = subprocess.run(
+            ['badblocks', '-w', '-s', device],
+            capture_output=True,
+            text=True,
+            timeout=86400  # 24 hours max
+        )
+
+        if result.returncode == 0:
+            # No bad blocks found
+            update_test_result(test_id, 'passed', serial)
+        else:
+            # Bad blocks found or error
+            update_test_result(test_id, 'failed', serial)
+
+    except subprocess.TimeoutExpired:
+        logger.error(f"Burn-in test timed out for {device}")
+        update_test_result(test_id, 'failed', serial)
+    except Exception as e:
+        logger.error(f"Burn-in test failed for {device}: {e}")
+        update_test_result(test_id, 'failed', serial)
+
+
+def start_test_thread(test_type: str, device: str, test_id: int, serial: str):
+    """Start a test in a background thread."""
+    def run_test():
+        if test_type == 'quick':
+            run_quick_test(device, test_id, serial)
+        elif test_type == 'short':
+            run_short_test(device, test_id, serial)
+        elif test_type == 'long':
+            run_long_test(device, test_id, serial)
+        elif test_type == 'burnin':
+            run_burnin_test(device, test_id, serial)
+        else:
+            logger.error(f"Unknown test type: {test_type}")
+            update_test_result(test_id, 'failed', serial)
+
+    thread = threading.Thread(target=run_test, daemon=True)
+    thread.start()
+
+    logger.info(f"Started {test_type} test thread for {device}")
+
+
 @app.post("/tests/start")
 async def start_test(request: Request):
     """Start a burn-in test on a device."""
@@ -1227,13 +1572,17 @@ async def start_test(request: Request):
                 VALUES (?, ?, ?, ?, ?, datetime('now'), 'testing')
             """, (serial, model, vendor, size_bytes, None))
 
-        # Create test record
-        conn.execute("""
+        # Create test record and get the test_id
+        cursor = conn.execute("""
             INSERT INTO tests (serial, device, started, result, test_type)
             VALUES (?, ?, datetime('now'), 'running', ?)
         """, (serial, device, test_type))
+        test_id = cursor.lastrowid
         conn.commit()
         conn.close()
+
+        # Start the actual test in a background thread
+        start_test_thread(test_type, device, test_id, serial)
 
         return {
             "status": "started",
@@ -1242,6 +1591,7 @@ async def start_test(request: Request):
             "model": model,
             "vendor": vendor,
             "test_type": test_type,
+            "test_id": test_id,
             "message": f"{test_type.capitalize()} test started on {device}"
         }
 
