@@ -2,9 +2,10 @@ FROM python:3.11-slim
 
 WORKDIR /lab
 
-# Install system dependencies (for smartctl if needed)
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     smartmontools \
+    e2fsprogs \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install Python dependencies

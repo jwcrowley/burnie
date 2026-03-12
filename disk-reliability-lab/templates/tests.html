@@ -398,6 +398,32 @@
         }
     }
 
+    // Kill running test
+    async function killTest(testId, serial, event) {
+        if (event) event.stopPropagation();
+
+        if (!confirm(`Kill running test for ${serial}?\\n\\nThis will stop the test and mark it as failed.`)) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/tests/${testId}/kill`, {
+                method: 'POST'
+            });
+
+            if (response.ok) {
+                alert(`Test killed successfully`);
+                // Refresh running tests
+                htmx.trigger('#running-tests-container', 'load');
+            } else {
+                const error = await response.json();
+                alert(`Failed to kill test: ${error.detail || 'Unknown error'}`);
+            }
+        } catch (error) {
+            alert(`Error: ${error.message}`);
+        }
+    }
+
     // Load test statistics
     async function loadTestStats() {
         const summary = await fetch('/api/tests/summary').then(r => r.json());

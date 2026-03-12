@@ -1337,16 +1337,19 @@ def run_short_test(device: str, test_id: int, serial: str):
         )
 
         if start_result.returncode != 0:
+            logger.error(f"Failed to start short test for {device}: {start_result.stderr}")
             update_test_result(test_id, 'failed', serial)
             return
+
+        # Wait a bit for test to actually start
+        time.sleep(5)
 
         # Wait for test to complete (poll every 10 seconds)
         max_wait = 300  # 5 minutes max
         waited = 0
-        while waited < max_wait:
-            time.sleep(10)
-            waited += 10
+        test_started = False
 
+        while waited < max_wait:
             status_result = subprocess.run(
                 ['smartctl', '-c', device],
                 capture_output=True,
@@ -1354,26 +1357,52 @@ def run_short_test(device: str, test_id: int, serial: str):
                 timeout=30
             )
 
-            # Check if test is complete
-            if 'Self-test routine in progress' not in status_result.stdout:
-                # Get test results
+            # Check if test is currently running
+            if 'Self-test routine in progress' in status_result.stdout:
+                test_started = True
+                logger.info(f"Short test in progress for {device} ({waited}s elapsed)")
+                time.sleep(10)
+                waited += 10
+                continue
+
+            # Test was started but no longer running
+            if test_started:
+                logger.info(f"Short test completed for {device} after {waited}s")
+
+                # Get test results - check the SMART health
                 health_result = subprocess.run(
-                    ['smartctl', '-l', 'selftest', device],
+                    ['smartctl', '-H', device],
                     capture_output=True,
                     text=True,
                     timeout=30
                 )
 
-                # Check for completed test without errors
-                if 'completed without error' in health_result.stdout.lower():
+                # Check if drive passed SMART test
+                if 'PASSED' in health_result.stdout or 'test passed' in health_result.stdout.lower():
                     update_test_result(test_id, 'passed', serial)
                 else:
+                    logger.error(f"SMART health check failed: {health_result.stdout}")
                     update_test_result(test_id, 'failed', serial)
                 return
 
+            # Test hasn't started yet, keep waiting
+            if waited < 30:  # Wait up to 30 seconds for test to start
+                logger.info(f"Waiting for test to start... ({waited}s)")
+                time.sleep(5)
+                waited += 5
+            else:
+                # Test never started
+                logger.error(f"Short test never started for {device}")
+                update_test_result(test_id, 'failed', serial)
+                return
+
         # Timeout
+        logger.error(f"Short test timed out for {device}")
         update_test_result(test_id, 'failed', serial)
 
+    except subprocess.TimeoutExpired:
+        logger.error(f"Short test timed out for {device}")
+        update_test_result(test_id, 'failed', serial)
     except Exception as e:
         logger.error(f"Short test failed for {device}: {e}")
         update_test_result(test_id, 'failed', serial)
@@ -1393,16 +1422,19 @@ def run_long_test(device: str, test_id: int, serial: str):
         )
 
         if start_result.returncode != 0:
+            logger.error(f"Failed to start long test for {device}: {start_result.stderr}")
             update_test_result(test_id, 'failed', serial)
             return
+
+        # Wait a bit for test to actually start
+        time.sleep(5)
 
         # Wait for test to complete (poll every 60 seconds)
         max_wait = 14400  # 4 hours max
         waited = 0
-        while waited < max_wait:
-            time.sleep(60)
-            waited += 60
+        test_started = False
 
+        while waited < max_wait:
             status_result = subprocess.run(
                 ['smartctl', '-c', device],
                 capture_output=True,
@@ -1410,26 +1442,52 @@ def run_long_test(device: str, test_id: int, serial: str):
                 timeout=30
             )
 
-            # Check if test is complete
-            if 'Self-test routine in progress' not in status_result.stdout:
-                # Get test results
+            # Check if test is currently running
+            if 'Self-test routine in progress' in status_result.stdout:
+                test_started = True
+                logger.info(f"Long test in progress for {device} ({waited}s elapsed)")
+                time.sleep(60)
+                waited += 60
+                continue
+
+            # Test was started but no longer running
+            if test_started:
+                logger.info(f"Long test completed for {device} after {waited}s")
+
+                # Get test results - check the SMART health
                 health_result = subprocess.run(
-                    ['smartctl', '-l', 'selftest', device],
+                    ['smartctl', '-H', device],
                     capture_output=True,
                     text=True,
                     timeout=30
                 )
 
-                # Check for completed test without errors
-                if 'completed without error' in health_result.stdout.lower():
+                # Check if drive passed SMART test
+                if 'PASSED' in health_result.stdout or 'test passed' in health_result.stdout.lower():
                     update_test_result(test_id, 'passed', serial)
                 else:
+                    logger.error(f"SMART health check failed: {health_result.stdout}")
                     update_test_result(test_id, 'failed', serial)
                 return
 
+            # Test hasn't started yet, keep waiting
+            if waited < 30:  # Wait up to 30 seconds for test to start
+                logger.info(f"Waiting for test to start... ({waited}s)")
+                time.sleep(5)
+                waited += 5
+            else:
+                # Test never started
+                logger.error(f"Long test never started for {device}")
+                update_test_result(test_id, 'failed', serial)
+                return
+
         # Timeout
+        logger.error(f"Long test timed out for {device}")
         update_test_result(test_id, 'failed', serial)
 
+    except subprocess.TimeoutExpired:
+        logger.error(f"Long test timed out for {device}")
+        update_test_result(test_id, 'failed', serial)
     except Exception as e:
         logger.error(f"Long test failed for {device}: {e}")
         update_test_result(test_id, 'failed', serial)
@@ -1596,6 +1654,99 @@ async def start_test(request: Request):
         }
 
     except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"detail": str(e)}
+        )
+
+
+@app.post("/tests/{test_id}/kill")
+async def kill_test(test_id: int):
+    """Kill a running test."""
+    import subprocess
+
+    try:
+        conn = get_db()
+
+        # Get the test
+        test = conn.execute(
+            "SELECT * FROM tests WHERE id = ?", (test_id,)
+        ).fetchone()
+
+        if not test:
+            conn.close()
+            return JSONResponse(
+                status_code=404,
+                content={"detail": f"Test {test_id} not found"}
+            )
+
+        if test['result'] != 'running':
+            conn.close()
+            return JSONResponse(
+                status_code=400,
+                content={"detail": f"Test {test_id} is not running (status: {test['result']})"}
+            )
+
+        device = test['device']
+        test_type = test.get('test_type', 'burnin')
+        killed = False
+
+        # For SMART tests (quick, short, long), try to abort with smartctl -X
+        if test_type in ['quick', 'short', 'long']:
+            try:
+                result = subprocess.run(
+                    ['smartctl', '-X', device],
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+                if result.returncode == 0:
+                    killed = True
+                    logger.info(f"Aborted SMART test on {device}")
+            except Exception as e:
+                logger.warning(f"Failed to abort SMART test: {e}")
+
+        # For badblocks tests with PID, kill the process
+        pid = test.get('pid')
+        if pid and not killed:
+            try:
+                os.kill(pid, signal.SIGTERM)
+                time.sleep(2)
+                try:
+                    os.kill(pid, 0)  # Check if still running
+                    os.kill(pid, signal.SIGKILL)  # Force kill
+                except OSError:
+                    pass  # Process is dead
+                killed = True
+                logger.info(f"Killed badblocks process {pid}")
+            except Exception as e:
+                logger.warning(f"Failed to kill process {pid}: {e}")
+
+        # Mark test as failed/cancelled
+        conn.execute("""
+            UPDATE tests
+            SET result = 'failed', finished = datetime('now')
+            WHERE id = ?
+        """, (test_id,))
+
+        # Update disk status
+        conn.execute("""
+            UPDATE disks
+            SET status = 'failed'
+            WHERE serial = ?
+        """, (test['serial'],))
+
+        conn.commit()
+        conn.close()
+
+        return {
+            "status": "killed",
+            "test_id": test_id,
+            "message": f"Test {test_id} killed successfully"
+        }
+
+    except Exception as e:
+        logger.error(f"Error killing test {test_id}: {e}")
         return JSONResponse(
             status_code=500,
             content={"detail": str(e)}

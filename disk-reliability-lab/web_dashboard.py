@@ -194,6 +194,19 @@ async def tests(request: Request):
     )
 
 
+@app.get("/attached", response_class=HTMLResponse)
+async def attached(request: Request):
+    """Attached disks view with blink feature."""
+    return templates.TemplateResponse(
+        "attached.html",
+        {
+            "request": request,
+            "refresh_interval": get_refresh_interval(),
+            "current_year": datetime.now().year
+        }
+    )
+
+
 # ============================================================================
 # HTMX Data Endpoints (for partial page updates)
 # ============================================================================
