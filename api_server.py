@@ -1487,11 +1487,12 @@ def run_short_test(device: str, test_id: int, serial: str):
                 # Check if drive passed SMART test
                 if 'PASSED' in health_result.stdout or 'test passed' in health_result.stdout.lower():
                     update_test_result(test_id, 'passed', serial)
-                    # Collect SMART data after successful test
-                    collect_smart_data(device, serial)
                 else:
                     logger.error(f"SMART health check failed: {health_result.stdout}")
                     update_test_result(test_id, 'failed', serial)
+
+                # Collect SMART data regardless of result (useful for diagnostics)
+                collect_smart_data(device, serial)
                 return
 
             # Test hasn't started yet, keep waiting
@@ -1574,11 +1575,12 @@ def run_long_test(device: str, test_id: int, serial: str):
                 # Check if drive passed SMART test
                 if 'PASSED' in health_result.stdout or 'test passed' in health_result.stdout.lower():
                     update_test_result(test_id, 'passed', serial)
-                    # Collect SMART data after successful test
-                    collect_smart_data(device, serial)
                 else:
                     logger.error(f"SMART health check failed: {health_result.stdout}")
                     update_test_result(test_id, 'failed', serial)
+
+                # Collect SMART data regardless of result (useful for diagnostics)
+                collect_smart_data(device, serial)
                 return
 
             # Test hasn't started yet, keep waiting
