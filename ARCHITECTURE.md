@@ -368,37 +368,26 @@ graph TB
     GRAF -->|Query| PROM
 ```
 
-## Security Model
+## Security Considerations
 
-```mermaid
-graph TB
-    subgraph "Authentication"
-        AUTH{Authenticated?}
-    end
+**Current State:** No authentication or authorization. The API and dashboard are open to anyone who can reach them.
 
-    subgraph "Authorization"
-        ADMIN[Admin Operations]
-        READ[Read Operations]
-        TEST[Test Operations]
-    end
+**Privilege Requirements:**
 
-    subgraph "Privilege Requirements"
-        ROOT[root required]
-        SUDO[sudo required]
-        USER[User level]
-    end
+| Operation | Privilege | Reason |
+|-----------|-----------|--------|
+| badblocks (destructive) | root / SYS_RAWIO | Direct disk access |
+| smartctl | root / SYS_RAWIO | SMART data access |
+| fio | root / SYS_RAWIO | Direct disk I/O |
+| hdparm (secure erase) | root / SYS_ADMIN | ATA commands |
+| Database read/write | user level | SQLite file access |
 
-    AUTH -->|No| READ
-    AUTH -->|Yes| ADMIN
+**Deployment Recommendations:**
 
-    ADMIN -->|Destructive Tests| ROOT
-    ADMIN -->|System Config| SUDO
-    TEST -->|SMART Tests| USER
-    TEST -->|Non-destructive| USER
-
-    READ -->|View Dashboard| USER
-    READ -->|View Analytics| USER
-```
+- Run behind a reverse proxy (nginx, traefik) with authentication
+- Use network policies / firewall rules to restrict access
+- Consider adding API key authentication for remote access
+- Docker privileged mode is required for disk access - isolate appropriately
 
 ## Error Handling Strategy
 
