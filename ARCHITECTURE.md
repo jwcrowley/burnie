@@ -337,6 +337,7 @@ graph TB
         subgraph "Docker Network"
             API_CONT[burnie-api<br/>port 8181]
             DASH_CONT[burnie-dashboard<br/>port 8080]
+            PROM_EXP[Prometheus Exporter<br/>port 9105]
         end
 
         subgraph "Volume Mounts"
@@ -345,9 +346,9 @@ graph TB
         end
 
         subgraph "Device Pass-through"
-            DEV1[/dev/sda]
-            DEV2[/dev/sdb]
-            DEV3[/dev/sdc]
+            DEV1[dev-sda]
+            DEV2[dev-sdb]
+            DEV3[dev-sdc]
         end
     end
 
