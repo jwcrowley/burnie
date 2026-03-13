@@ -87,7 +87,7 @@ sequenceDiagram
     Dashboard-->>User: Render HTML
 
     User->>Dashboard: Start burn-in test
-    Dashboard->>API: POST /test/start
+    Dashboard->>API: POST /tests/start
     API->>Disk: Execute badblocks
     Disk-->>API: Test progress
     API->>DB: Update test record
@@ -288,12 +288,12 @@ sudo ./batch_burnin.sh --devices /dev/sdb,/dev/sdc
 
 ```bash
 # Start burn-in test
-curl -X POST http://localhost:8181/test/start \
+curl -X POST http://localhost:8181/tests/start \
   -H "Content-Type: application/json" \
   -d '{"device": "/dev/sdb", "test_type": "burnin"}'
 
 # Start SMART test
-curl -X POST http://localhost:8181/test/start \
+curl -X POST http://localhost:8181/tests/start \
   -H "Content-Type: application/json" \
   -d '{"device": "/dev/sdb", "test_type": "smart_short"}'
 ```
@@ -323,19 +323,24 @@ curl -X POST http://localhost:8181/test/start \
 ```
 GET  /disks                    - List all disks
 GET  /disks/{serial}           - Get disk details
-GET  /attached                 - List attached physical disks
-POST /disk/register            - Register new disk
-PUT  /disk/update/{serial}     - Update disk info
+GET  /disks/{serial}/smart     - Get SMART attributes
+GET  /disks/{serial}/temperature - Get temperature history
+GET  /disks/{serial}/tests     - Get test history
+GET  /disks/{serial}/latency   - Get latency anomalies
+GET  /disks/export/csv         - Export disks as CSV
+DELETE /disks/{serial}         - Delete disk
+GET  /system/available-disks   - List attached physical disks
 ```
 
 #### Tests
 
 ```
-POST /test/start               - Start a test
+POST /tests/start              - Start a test
 GET  /tests/running            - List running tests
-POST /test/kill/{id}           - Kill a running test
+POST /tests/{test_id}/kill     - Kill a running test
 GET  /tests/history            - Test history
-GET  /tests/cleanup            - Cleanup stale tests
+POST /tests/cleanup            - Cleanup stale tests
+GET  /tests/summary            - Test statistics
 ```
 
 #### Analytics
@@ -343,17 +348,30 @@ GET  /tests/cleanup            - Cleanup stale tests
 ```
 GET  /stats/overview           - Dashboard overview
 GET  /stats/vendor             - Reliability by vendor
+GET  /stats/model              - Reliability by model
 GET  /stats/batch              - Reliability by batch
+GET  /stats/interface          - Reliability by interface
 GET  /stats/batch-comparison   - Compare disk batches
+GET  /stats/timeline           - Timeline data (days param)
 ```
 
 #### SMART & Health
 
 ```
-GET  /smart/{device}           - Get SMART data
 GET  /smart-errors/{device}    - SMART error log
 GET  /temperature/summary      - Temperature summary
 GET  /alerts                   - Active alerts
+```
+
+#### Other
+
+```
+GET  /search/disks             - Search disks
+GET  /filter/disks             - Filter disks
+GET  /metadata/vendors         - List vendors
+GET  /metadata/models          - List models
+GET  /health                   - Health check
+POST /disk/secure-erase        - Secure erase disk
 ```
 
 ### Interactive API Docs

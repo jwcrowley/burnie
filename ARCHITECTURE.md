@@ -179,7 +179,7 @@ sequenceDiagram
     participant HW as Hardware
 
     User->>UI: Start Test (device, type)
-    UI->>API: POST /test/start
+    UI->>API: POST /tests/start
     API->>DB: Create test record (status=running)
     API->>BG: Spawn test thread
     API-->>UI: Test started (test_id)
