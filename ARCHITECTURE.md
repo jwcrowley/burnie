@@ -483,27 +483,55 @@ sequenceDiagram
 ### Metrics Collected
 
 ```mermaid
-mindmap
-    root((Metrics))
-        Disk Health
-            Reliability Score
-            SMART Attributes
-            Temperature
-            PowerOnHours
-        Test Status
-            Running Tests
-            Pass Fail Rate
-            Test Duration
-            Last Test Time
-        System
-            Active Tests
-            Queue Depth
-            Database Size
-            API Response Time
-        Alerts
-            Low Score Count
-            High Temp Count
-            Latency Anomalies
+graph TB
+    METRICS[Metrics Collected]
+
+    DH[Disk Health]
+    DH_RS[Reliability Score]
+    DH_SMART[SMART Attributes]
+    DH_TEMP[Temperature]
+    DH_PWR[Power On Hours]
+
+    TS[Test Status]
+    TS_RUN[Running Tests]
+    TS_RATE[Pass/Fail Rate]
+    TS_DUR[Test Duration]
+    TS_LAST[Last Test Time]
+
+    SYS[System]
+    SYS_ACT[Active Tests]
+    SYS_Q[Queue Depth]
+    SYS_DB[Database Size]
+    SYS_API[API Response Time]
+
+    AL[Alerts]
+    AL_SCORE[Low Score Count]
+    AL_TEMP[High Temp Count]
+    AL_LAT[Latency Anomalies]
+
+    METRICS --> DH
+    METRICS --> TS
+    METRICS --> SYS
+    METRICS --> AL
+
+    DH --> DH_RS
+    DH --> DH_SMART
+    DH --> DH_TEMP
+    DH --> DH_PWR
+
+    TS --> TS_RUN
+    TS --> TS_RATE
+    TS --> TS_DUR
+    TS --> TS_LAST
+
+    SYS --> SYS_ACT
+    SYS --> SYS_Q
+    SYS --> SYS_DB
+    SYS --> SYS_API
+
+    AL --> AL_SCORE
+    AL --> AL_TEMP
+    AL --> AL_LAT
 ```
 
 ### Prometheus Metrics Exported
