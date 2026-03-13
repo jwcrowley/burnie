@@ -73,30 +73,27 @@ classDiagram
         +Jinja2Templates templates
         +fetch_api(endpoint)
         +proxy_request(method, path)
-        +get_stats_overview()
-        +get_disks_list()
-        +get_disk_detail(serial)
     }
 
     class RouteHandlers {
-        +GET /dashboard
-        +GET /disks
-        +GET /disks/{serial}
-        +GET /analytics
-        +GET /alerts
-        +GET /tests
-        +GET /attached
+        +GET_dashboard()
+        +GET_disks()
+        +GET_disks_serial()
+        +GET_analytics()
+        +GET_alerts()
+        +GET_tests()
+        +GET_attached()
     }
 
     class HTMXPartials {
-        +GET /partials/stats/overview
-        +GET /partials/alerts/summary
-        +GET /partials/disks/table
-        +GET /partials/tests/running
+        +GET_stats_overview()
+        +GET_alerts_summary()
+        +GET_disks_table()
+        +GET_tests_running()
     }
 
     class SSEStream {
-        +GET /events
+        +GET_events()
         -event_generator()
     }
 
@@ -124,42 +121,42 @@ classDiagram
     }
 
     class DiskEndpoints {
-        +GET /disks
-        +GET /disks/{serial}
-        +GET /attached
-        +POST /disk/register
-        +PUT /disk/update/{serial}
+        +GET_disks()
+        +GET_disks_serial()
+        +GET_attached()
+        +POST_disk_register()
+        +PUT_disk_update()
     }
 
     class TestEndpoints {
-        +POST /test/start
-        +GET /tests/running
-        +POST /test/kill/{id}
-        +GET /tests/history
-        +POST /tests/cleanup
+        +POST_test_start()
+        +GET_tests_running()
+        +POST_test_kill()
+        +GET_tests_history()
+        +POST_tests_cleanup()
     }
 
     class AnalyticsEndpoints {
-        +GET /stats/overview
-        +GET /stats/vendor
-        +GET /stats/batch
-        +GET /stats/batch-comparison
+        +GET_stats_overview()
+        +GET_stats_vendor()
+        +GET_stats_batch()
+        +GET_batch_comparison()
     }
 
     class SmartEndpoints {
-        +GET /smart/{device}
-        +GET /smart-errors/{device}
-        +GET /temperature/summary
+        +GET_smart_device()
+        +GET_smart_errors()
+        +GET_temp_summary()
     }
 
     class TestRunner {
-        +run_burnin_test(device)
-        +run_quick_test(device)
-        +run_short_test(device)
-        +run_long_test(device)
-        +run_seq_speed_test(device)
-        +run_iops_test(device)
-        +run_sustained_write_test(device)
+        +run_burnin_test()
+        +run_quick_test()
+        +run_short_test()
+        +run_long_test()
+        +run_seq_speed_test()
+        +run_iops_test()
+        +run_sustained_write_test()
     }
 
     APIServer --> DiskEndpoints
