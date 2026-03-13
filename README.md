@@ -53,9 +53,10 @@ graph TB
     end
 
     subgraph "Monitoring Layer"
-        L[Prometheus Exporter]
-        M[Grafana Dashboards]
+        L[Prometheus Exporter<br/>port 9105]
     end
+
+    note for L "External Prometheus scrapes this endpoint"
 
     A -->|HTTP| C
     B -->|HTTP| D
@@ -67,8 +68,7 @@ graph TB
     D -->|Query/Write| I
     D -->|Store| J
     D -->|Write| K
-    L -->|Scrape| D
-    M -->|Query| L
+    L -->|Read| I
 ```
 
 ### Data Flow
@@ -462,7 +462,7 @@ async def start_test(request: TestRequest):
 - **Styling**: Tailwind CSS (responsive, modern UI)
 - **Charts**: Chart.js (interactive visualizations)
 - **Database**: SQLite (with PostgreSQL support planned)
-- **Monitoring**: Prometheus + Grafana
+- **Monitoring**: Prometheus metrics exporter (port 9105)
 - **Deployment**: Docker/Docker Compose
 
 ## License

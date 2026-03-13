@@ -39,9 +39,10 @@ graph TB
     end
 
     subgraph "Monitoring Layer"
-        PROM[Prometheus Exporter]
-        GRAFANA[Grafana]
+        PROM_EXP[Prometheus Exporter<br/>port 9105]
     end
+
+    note for PROM_EXP "External Prometheus scrapes this endpoint"
 
     WEB -->|HTTP| DASH
     WEB -->|HTTP| API
@@ -60,8 +61,7 @@ graph TB
     FIO -->|Access| DISKS
     API -->|SQL| SQLITE
     TEST_MGR -->|Write| FILES
-    PROM -->|Scrape| API
-    GRAFANA -->|Query| PROM
+    PROM_EXP -->|Read| SQLITE
 ```
 
 ## Component Details
@@ -357,8 +357,8 @@ graph TB
     end
 
     subgraph "External Monitoring"
-        PROM[Prometheus]
-        GRAF[Grafana]
+        PROM[Prometheus<br/>scrapes port 9105]
+        GRAF[Grafana<br/>queries Prometheus]
     end
 
     USER[User Browser] -->|HTTP 8080| DASH_CONT
@@ -368,7 +368,7 @@ graph TB
     API_CONT -->|Direct Access| DEV1
     API_CONT -->|Direct Access| DEV2
     API_CONT -->|Direct Access| DEV3
-    PROM -->|Scrape| API_CONT
+    PROM -->|Scrape| PROM_EXP
     GRAF -->|Query| PROM
 ```
 
@@ -510,24 +510,16 @@ mindmap
             Latency Anomalies
 ```
 
-### Prometheus Metrics
+### Prometheus Metrics Exported
 
-```python
-# Disk metrics
-disk_info{serial, model, vendor}
-disk_reliability_score{serial}
-disk_temperature{serial}
+The `prometheus_exporter.py` exposes metrics on port 9105:
 
-# Test metrics
-test_running{serial, test_type}
-test_duration_seconds{serial, test_type, result}
-test_total{test_type, result}
-
-# System metrics
-burnie_active_tests
-burnie_db_size_bytes
-burnie_api_request_duration_seconds
+```prometheus
+# Disk reliability score
+disk_reliability_score{serial="XXXX"}
 ```
+
+External Prometheus server scrapes this endpoint. Grafana dashboards can then query Prometheus to visualize the data.
 
 ## Extension Points
 
