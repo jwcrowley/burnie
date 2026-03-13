@@ -489,10 +489,10 @@ mindmap
             Reliability Score
             SMART Attributes
             Temperature
-            Power-on Hours
+            PowerOnHours
         Test Status
             Running Tests
-            Pass/Fail Rate
+            Pass Fail Rate
             Test Duration
             Last Test Time
         System
