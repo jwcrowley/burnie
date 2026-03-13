@@ -53,10 +53,8 @@ graph TB
     end
 
     subgraph "Monitoring Layer"
-        L[Prometheus Exporter<br/>port 9105]
+        L[Prometheus Exporter<br/>port 9105<br/>External Prometheus scrapes this]
     end
-
-    note for L "External Prometheus scrapes this endpoint"
 
     A -->|HTTP| C
     B -->|HTTP| D

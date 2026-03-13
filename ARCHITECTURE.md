@@ -39,10 +39,8 @@ graph TB
     end
 
     subgraph "Monitoring Layer"
-        PROM_EXP[Prometheus Exporter<br/>port 9105]
+        PROM_EXP[Prometheus Exporter<br/>port 9105<br/>External Prometheus scrapes this]
     end
-
-    note for PROM_EXP "External Prometheus scrapes this endpoint"
 
     WEB -->|HTTP| DASH
     WEB -->|HTTP| API
